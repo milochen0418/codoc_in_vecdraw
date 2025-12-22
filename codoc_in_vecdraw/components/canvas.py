@@ -7,7 +7,7 @@ from reflex_mouse_track import mouse_track
 def canvas() -> rx.Component:
     """The main drawing canvas area."""
     return mouse_track(
-        rx.el.div(
+        rx.box(
             rx.el.div(
                 class_name="absolute inset-0 opacity-[0.03] pointer-events-none",
                 style={
@@ -33,13 +33,7 @@ def canvas() -> rx.Component:
             ),
             class_name="w-full h-full",
             on_mouse_move=rx.call_script(
-                """
-                event.preventDefault();
-                return [
-                    event.clientX,
-                    event.clientY
-                ]
-                """,
+                "([event.clientX, event.clientY])",
                 callback=EditorState.handle_mouse_move.throttle(20),
             ),
         ),

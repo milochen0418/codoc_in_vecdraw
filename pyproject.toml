@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "codoc-in-vecdraw"
+version = "0.1.0"
+description = "Reflex vector drawing app"
+authors = ["Milo Chen <milochen0418@gmail.com>"]
+readme = "README.md"
+packages = [{include = "codoc_in_vecdraw"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+reflex = "0.8.23"
+reflex-mouse-track = "^0.0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

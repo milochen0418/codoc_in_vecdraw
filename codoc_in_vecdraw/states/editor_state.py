@@ -158,7 +158,7 @@ class EditorState(rx.SharedState):
     @rx.event
     def handle_mouse_move(self, data: list):
         """Handle mouse move on canvas (for dragging)."""
-        if not data or len(data) < 2:
+        if not data or len(data) < 2 or data[0] is None or data[1] is None:
             return
         x = int(data[0]) - self.offset_x
         y = int(data[1]) - self.offset_y
