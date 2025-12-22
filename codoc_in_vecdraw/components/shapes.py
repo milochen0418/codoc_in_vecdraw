@@ -51,6 +51,7 @@ def render_selection_overlay(shape: Shape) -> rx.Component:
                     fill="white",
                     stroke="#7c3aed",
                     stroke_width=1,
+                    class_name="cursor-nw-resize",
                 ),
                 rx.el.rect(
                     x=shape["x"] + shape["width"] - 4,
@@ -60,6 +61,7 @@ def render_selection_overlay(shape: Shape) -> rx.Component:
                     fill="white",
                     stroke="#7c3aed",
                     stroke_width=1,
+                    class_name="cursor-ne-resize",
                 ),
                 rx.el.rect(
                     x=shape["x"] + shape["width"] - 4,
@@ -69,6 +71,7 @@ def render_selection_overlay(shape: Shape) -> rx.Component:
                     fill="white",
                     stroke="#7c3aed",
                     stroke_width=1,
+                    class_name="cursor-se-resize",
                 ),
                 rx.el.rect(
                     x=shape["x"] - 4,
@@ -78,6 +81,7 @@ def render_selection_overlay(shape: Shape) -> rx.Component:
                     fill="white",
                     stroke="#7c3aed",
                     stroke_width=1,
+                    class_name="cursor-sw-resize",
                 ),
             ),
         ),
@@ -138,4 +142,57 @@ def render_shape(shape: Shape) -> rx.Component:
 
 def render_preview() -> rx.Component:
     """Render the preview of the shape currently being drawn."""
-    return rx.fragment()
+    return rx.cond(
+        EditorState.is_drawing & (EditorState.current_tool != "select"),
+        rx.match(
+            EditorState.current_tool,
+            (
+                "rectangle",
+                rx.el.rect(
+                    x=rx.cond(
+                        EditorState.start_x < EditorState.current_x,
+                        EditorState.start_x,
+                        EditorState.current_x,
+                    ),
+                    y=rx.cond(
+                        EditorState.start_y < EditorState.current_y,
+                        EditorState.start_y,
+                        EditorState.current_y,
+                    ),
+                    width=abs(EditorState.current_x - EditorState.start_x),
+                    height=abs(EditorState.current_y - EditorState.start_y),
+                    fill="#e9d5ff",
+                    stroke="#7c3aed",
+                    stroke_width=2,
+                    opacity=0.5,
+                ),
+            ),
+            (
+                "ellipse",
+                rx.el.ellipse(
+                    cx=(EditorState.start_x + EditorState.current_x) / 2,
+                    cy=(EditorState.start_y + EditorState.current_y) / 2,
+                    rx=abs(EditorState.current_x - EditorState.start_x) / 2,
+                    ry=abs(EditorState.current_y - EditorState.start_y) / 2,
+                    fill="#e9d5ff",
+                    stroke="#7c3aed",
+                    stroke_width=2,
+                    opacity=0.5,
+                ),
+            ),
+            (
+                "line",
+                rx.el.line(
+                    x1=EditorState.start_x,
+                    y1=EditorState.start_y,
+                    x2=EditorState.current_x,
+                    y2=EditorState.current_y,
+                    stroke="#7c3aed",
+                    stroke_width=2,
+                    opacity=0.5,
+                ),
+            ),
+            rx.fragment(),
+        ),
+        rx.fragment(),
+    )

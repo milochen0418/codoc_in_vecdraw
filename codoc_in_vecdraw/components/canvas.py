@@ -3,10 +3,28 @@ from codoc_in_vecdraw.states.editor_state import EditorState
 from codoc_in_vecdraw.components.shapes import render_shape, render_preview
 from reflex_mouse_track import mouse_track
 
+GET_COORDS_SCRIPT = """
+(function() {
+    var elem = document.getElementById('main-canvas');
+    if (!elem) return {x: 0, y: 0};
+    var rect = elem.getBoundingClientRect();
+    var e = window.event;
+    if (!e) {
+        // Try to find event in arguments if window.event is missing (Firefox)
+        try { e = arguments[0]; } catch(err) {}
+    }
+    if (!e) return {x: 0, y: 0};
+    
+    return {
+        x: Math.round(e.clientX - rect.left),
+        y: Math.round(e.clientY - rect.top)
+    };
+})()
+"""
 
 def canvas() -> rx.Component:
     """The main drawing canvas area."""
-    return mouse_track(
+    return rx.box(
         rx.box(
             rx.el.div(
                 class_name="absolute inset-0 opacity-[0.03] pointer-events-none",
@@ -32,10 +50,6 @@ def canvas() -> rx.Component:
                 id="main-svg",
             ),
             class_name="w-full h-full",
-            on_mouse_move=rx.call_script(
-                "([event.clientX, event.clientY])",
-                callback=EditorState.handle_mouse_move.throttle(20),
-            ),
         ),
         id="main-canvas",
         class_name="relative flex-1 w-full h-full bg-gray-50 overflow-hidden touch-none",
@@ -44,7 +58,8 @@ def canvas() -> rx.Component:
                 EditorState.current_tool == "select", "default", "crosshair"
             )
         },
-        on_mouse_down=EditorState.handle_mouse_down,
-        on_mouse_up=EditorState.handle_mouse_up,
-        on_mouse_leave=EditorState.handle_mouse_up,
+        on_mouse_down=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_down),
+        on_mouse_move=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_move),
+        on_mouse_up=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_up),
+        on_mouse_leave=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_up),
     )

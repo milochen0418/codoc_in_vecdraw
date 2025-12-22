@@ -35,6 +35,7 @@ class EditorState(rx.SharedState):
     current_tool: str = "select"
     is_drawing: bool = False
     is_dragging: bool = False
+    active_handle: str = ""
     start_x: int = 0
     start_y: int = 0
     current_x: int = 0
@@ -96,6 +97,39 @@ class EditorState(rx.SharedState):
             "end_y": 0,
         }
 
+    def _get_handle_under_point(self, x: int, y: int, shape: Shape) -> str:
+        """Check if a point is over a resize handle."""
+        if not shape:
+            return ""
+            
+        # Handle size is roughly 8x8 (radius 4 or rect 8x8 centered)
+        # Let's use a hit radius of 6 for easier clicking
+        hit_r = 6
+        
+        if shape["type"] == "line":
+            # Start point
+            if abs(x - shape["x"]) <= hit_r and abs(y - shape["y"]) <= hit_r:
+                return "start"
+            # End point
+            if abs(x - shape["end_x"]) <= hit_r and abs(y - shape["end_y"]) <= hit_r:
+                return "end"
+        else:
+            # Rectangle / Ellipse handles
+            # NW
+            if abs(x - shape["x"]) <= hit_r and abs(y - shape["y"]) <= hit_r:
+                return "nw"
+            # NE
+            if abs(x - (shape["x"] + shape["width"])) <= hit_r and abs(y - shape["y"]) <= hit_r:
+                return "ne"
+            # SE
+            if abs(x - (shape["x"] + shape["width"])) <= hit_r and abs(y - (shape["y"] + shape["height"])) <= hit_r:
+                return "se"
+            # SW
+            if abs(x - shape["x"]) <= hit_r and abs(y - (shape["y"] + shape["height"])) <= hit_r:
+                return "sw"
+                
+        return ""
+
     def _save_to_history(self):
         """Save current state to history stack."""
         self.past.append(copy.deepcopy(self.shapes))
@@ -108,14 +142,47 @@ class EditorState(rx.SharedState):
         self.selected_shape_id = ""
 
     @rx.event
-    def handle_mouse_down(self, point: Point):
+    def handle_mouse_down(self, point: dict[str, int]):
         """Handle mouse down on canvas."""
-        x = point.x
-        y = point.y
+        # Debug logging
+        print(f"Mouse Down: {point}")
+        
+        # Ensure point is a dictionary and has x, y
+        if not isinstance(point, dict) or "x" not in point or "y" not in point:
+            print("Invalid point data")
+            return
+            
+        if point["x"] is None or point["y"] is None:
+            print("Point coordinates are None")
+            return
+
+        x = point["x"]
+        y = point["y"]
+        
+        print(f"Click at: {x}, {y} (Raw: {point['x']}, {point['y']})")
+        print(f"Selected Shape ID: {self.selected_shape_id}")
+        
         self.start_x = x
         self.start_y = y
         self.current_x = x
         self.current_y = y
+        
+        # Check if we clicked a handle of the selected shape
+        if self.selected_shape_id:
+            selected_shape = next((s for s in self.shapes if s["id"] == self.selected_shape_id), None)
+            if selected_shape:
+                print(f"Checking handles for shape: {selected_shape}")
+                handle = self._get_handle_under_point(x, y, selected_shape)
+                print(f"Handle found: {handle}")
+                
+                if handle:
+                    self.active_handle = handle
+                    self.is_dragging = True
+                    self.snapshot_shapes = copy.deepcopy(self.shapes)
+                    self.drag_offset_x = x
+                    self.drag_offset_y = y
+                    return
+
         if self.current_tool == "select":
             found_shape_id = ""
             for shape in reversed(self.shapes):
@@ -156,44 +223,113 @@ class EditorState(rx.SharedState):
             self.snapshot_shapes = copy.deepcopy(self.shapes)
 
     @rx.event
-    def handle_mouse_move(self, data: list):
+    def handle_mouse_move(self, data: dict[str, int]):
         """Handle mouse move on canvas (for dragging)."""
-        if not data or len(data) < 2 or data[0] is None or data[1] is None:
+        # Ensure data is valid
+        if not data or not isinstance(data, dict) or "x" not in data or "y" not in data:
             return
-        x = int(data[0]) - self.offset_x
-        y = int(data[1]) - self.offset_y
+            
+        if data["x"] is None or data["y"] is None:
+            return
+
+        x = data["x"]
+        y = data["y"]
         self.current_x = x
         self.current_y = y
+        
+        # Debug log for dragging state
+        if self.is_dragging:
+            # print(f"Dragging active: handle={self.active_handle}, shape={self.selected_shape_id}")
+            pass
+        
         if self.is_dragging and self.selected_shape_id:
+            # Log only when actually dragging/resizing
+            if self.active_handle:
+                print(f"Resizing: Handle={self.active_handle}, Pos=({x}, {y})")
+            else:
+                print(f"Dragging: Pos=({x}, {y})")
+
             dx = x - self.drag_offset_x
             dy = y - self.drag_offset_y
             self.drag_offset_x = x
             self.drag_offset_y = y
+            
             new_shapes = []
             for shape in self.shapes:
                 if shape["id"] == self.selected_shape_id:
                     s = shape.copy()
-                    s["x"] += dx
-                    s["y"] += dy
-                    if s["type"] == "line":
-                        s["end_x"] += dx
-                        s["end_y"] += dy
+                    
+                    if self.active_handle:
+                        # Handle resizing
+                        if s["type"] == "line":
+                            if self.active_handle == "start":
+                                s["x"] += dx
+                                s["y"] += dy
+                            elif self.active_handle == "end":
+                                s["end_x"] += dx
+                                s["end_y"] += dy
+                        else:
+                            # Rectangle / Ellipse resizing
+                            if "n" in self.active_handle:
+                                s["y"] += dy
+                                s["height"] -= dy
+                            if "s" in self.active_handle:
+                                s["height"] += dy
+                            if "w" in self.active_handle:
+                                s["x"] += dx
+                                s["width"] -= dx
+                            if "e" in self.active_handle:
+                                s["width"] += dx
+                                
+                            # Handle negative dimensions (flipping)
+                            if s["width"] < 0:
+                                s["width"] = abs(s["width"])
+                                s["x"] -= s["width"]
+                                # Flip handle horizontally
+                                self.active_handle = self.active_handle.translate(str.maketrans("we", "ew"))
+                                
+                            if s["height"] < 0:
+                                s["height"] = abs(s["height"])
+                                s["y"] -= s["height"]
+                                # Flip handle vertically
+                                self.active_handle = self.active_handle.translate(str.maketrans("ns", "sn"))
+                    else:
+                        # Handle moving
+                        s["x"] += dx
+                        s["y"] += dy
+                        if s["type"] == "line":
+                            s["end_x"] += dx
+                            s["end_y"] += dy
+                            
                     new_shapes.append(s)
                 else:
                     new_shapes.append(shape)
             self.shapes = new_shapes
 
     @rx.event
-    def handle_mouse_up(self, point: Point | None = None):
+    def handle_mouse_up(self, point: dict[str, int] | None = None):
         """Handle mouse up on canvas."""
-        if point:
-            self.current_x = point.x
-            self.current_y = point.y
+        print("Mouse Up")
+        if point and isinstance(point, dict) and "x" in point and "y" in point:
+            if point["x"] is not None and point["y"] is not None:
+                self.current_x = point["x"]
+                self.current_y = point["y"]
+            
+        # Reset active handle and dragging state
+        self.active_handle = ""
+        self.is_dragging = False
+        
         if self.is_drawing and self.current_tool != "select":
-            x = min(self.start_x, self.current_x)
-            y = min(self.start_y, self.current_y)
-            width = abs(self.current_x - self.start_x)
-            height = abs(self.current_y - self.start_y)
+            # Ensure coordinates are valid integers
+            start_x = self.start_x if self.start_x is not None else 0
+            start_y = self.start_y if self.start_y is not None else 0
+            current_x = self.current_x if self.current_x is not None else 0
+            current_y = self.current_y if self.current_y is not None else 0
+            
+            x = min(start_x, current_x)
+            y = min(start_y, current_y)
+            width = abs(current_x - start_x)
+            height = abs(current_y - start_y)
             if width > 2 or height > 2 or self.current_tool == "line":
                 self.past.append(self.snapshot_shapes)
                 self.future.clear()
