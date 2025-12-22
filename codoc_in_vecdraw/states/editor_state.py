@@ -110,8 +110,8 @@ class EditorState(rx.SharedState):
     @rx.event
     def handle_mouse_down(self, point: Point):
         """Handle mouse down on canvas."""
-        x = point.x - self.offset_x
-        y = point.y - self.offset_y
+        x = point.x
+        y = point.y
         self.start_x = x
         self.start_y = y
         self.current_x = x
@@ -187,8 +187,8 @@ class EditorState(rx.SharedState):
     def handle_mouse_up(self, point: Point | None = None):
         """Handle mouse up on canvas."""
         if point:
-            self.current_x = point.x - self.offset_x
-            self.current_y = point.y - self.offset_y
+            self.current_x = point.x
+            self.current_y = point.y
         if self.is_drawing and self.current_tool != "select":
             x = min(self.start_x, self.current_x)
             y = min(self.start_y, self.current_y)
