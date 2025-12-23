@@ -31,6 +31,7 @@ def canvas() -> rx.Component:
                 style={
                     "backgroundImage": "radial-gradient(circle, #000 1px, transparent 1px)",
                     "backgroundSize": "20px 20px",
+                    "backgroundPosition": f"{EditorState.pan_x}px {EditorState.pan_y}px",
                 },
             ),
             rx.el.svg(
@@ -39,11 +40,12 @@ def canvas() -> rx.Component:
                 ),
                 rx.el.g(
                     rx.foreach(EditorState.shapes, render_shape),
+                    rx.cond(EditorState.is_drawing, render_preview(), rx.fragment()),
                     style={
-                        "pointerEvents": rx.cond(EditorState.is_drawing, "none", "auto")
+                        "pointerEvents": rx.cond(EditorState.is_drawing, "none", "auto"),
+                        "transform": f"translate({EditorState.pan_x}px, {EditorState.pan_y}px)",
                     },
                 ),
-                rx.cond(EditorState.is_drawing, render_preview(), rx.fragment()),
                 width="100%",
                 height="100%",
                 class_name="absolute inset-0 w-full h-full touch-none block",
@@ -55,7 +57,11 @@ def canvas() -> rx.Component:
         class_name="relative flex-1 w-full h-full bg-gray-50 overflow-hidden touch-none",
         style={
             "cursor": rx.cond(
-                EditorState.current_tool == "select", "default", "crosshair"
+                EditorState.current_tool == "hand",
+                rx.cond(EditorState.is_panning, "grabbing", "grab"),
+                rx.cond(
+                    EditorState.current_tool == "select", "default", "crosshair"
+                )
             )
         },
         on_mouse_down=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_down),

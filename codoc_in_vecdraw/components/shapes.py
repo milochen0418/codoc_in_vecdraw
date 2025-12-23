@@ -135,6 +135,62 @@ def render_shape(shape: Shape) -> rx.Component:
                 **common_props,
             ),
         ),
+        (
+            "triangle",
+            rx.el.polygon(
+                points=f"{shape['x'] + shape['width']/2},{shape['y']} {shape['x']},{shape['y'] + shape['height']} {shape['x'] + shape['width']},{shape['y'] + shape['height']}",
+                **common_props,
+            ),
+        ),
+        (
+            "image",
+            rx.el.image(
+                href=rx.get_upload_url(shape["src"]),
+                x=shape["x"],
+                y=shape["y"],
+                width=shape["width"],
+                height=shape["height"],
+                class_name=rx.cond(
+                    is_selected,
+                    "cursor-move outline-none",
+                    "cursor-pointer hover:opacity-80 transition-opacity",
+                ),
+                preserve_aspect_ratio="none",
+            ),
+        ),
+        (
+            "text",
+            rx.el.text(
+                shape["content"],
+                x=shape["x"],
+                y=shape["y"],
+                font_size=shape["height"],
+                fill=shape["fill"],
+                dominant_baseline="hanging",
+                class_name=rx.cond(
+                    is_selected,
+                    "cursor-move outline-none select-none",
+                    "cursor-pointer hover:opacity-80 transition-opacity select-none",
+                ),
+                style={"userSelect": "none"},
+            ),
+        ),
+        (
+            "pencil",
+            rx.el.path(
+                d=shape["path_data"],
+                fill="none",
+                stroke=shape["stroke"],
+                stroke_width=shape["stroke_width"],
+                stroke_linecap="round",
+                stroke_linejoin="round",
+                class_name=rx.cond(
+                    is_selected,
+                    "cursor-move outline-none",
+                    "cursor-pointer hover:opacity-80 transition-opacity",
+                ),
+            ),
+        ),
         rx.fragment(),
     )
     return rx.el.g(shape_element, render_selection_overlay(shape), key=shape["id"])
@@ -187,6 +243,26 @@ def render_preview() -> rx.Component:
                     y1=EditorState.start_y,
                     x2=EditorState.current_x,
                     y2=EditorState.current_y,
+                    stroke="#7c3aed",
+                    stroke_width=2,
+                    opacity=0.5,
+                ),
+            ),
+            (
+                "triangle",
+                rx.el.polygon(
+                    points=f"{(EditorState.start_x + EditorState.current_x)/2},{EditorState.start_y} {EditorState.start_x},{EditorState.current_y} {EditorState.current_x},{EditorState.current_y}",
+                    fill="#e9d5ff",
+                    stroke="#7c3aed",
+                    stroke_width=2,
+                    opacity=0.5,
+                ),
+            ),
+            (
+                "pencil",
+                rx.el.path(
+                    d=EditorState.current_path_string,
+                    fill="none",
                     stroke="#7c3aed",
                     stroke_width=2,
                     opacity=0.5,

@@ -36,6 +36,11 @@ def properties_panel() -> rx.Component:
                         ),
                         class_name="flex justify-between items-center mb-4 p-2 bg-gray-50 rounded-lg",
                     ),
+                    rx.cond(
+                        EditorState.selected_shape["type"] == "text",
+                        property_input("Text Content", "content"),
+                        rx.fragment(),
+                    ),
                     property_input("Fill Color", "fill", "color"),
                     property_input("Stroke Color", "stroke", "color"),
                     rx.el.div(
