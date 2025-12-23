@@ -474,7 +474,7 @@ class EditorState(rx.SharedState):
                     "y": y,
                     "width": width,
                     "height": height,
-                    "fill": "transparent" if self.current_tool in ["line", "triangle"] else "#e9d5ff",
+                    "fill": "transparent" if self.current_tool == "line" else "#e9d5ff",
                     "stroke": "#7c3aed",
                     "stroke_width": 2,
                     "end_x": 0,
