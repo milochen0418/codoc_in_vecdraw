@@ -17,6 +17,34 @@ def property_input(label: str, prop: str, type_: str = "text") -> rx.Component:
     )
 
 
+def stroke_width_control() -> rx.Component:
+    """Helper to create the stroke width slider."""
+    return rx.el.div(
+        rx.el.label(
+            "Stroke Width",
+            class_name="block text-xs font-medium text-gray-500 mb-1",
+        ),
+        rx.el.input(
+            type="range",
+            min="0",
+            max="20",
+            default_value=EditorState.selected_shape["stroke_width"].to_string(),
+            key=EditorState.selected_shape["id"],
+            on_change=lambda val: EditorState.update_property(
+                "stroke_width", val.to(int)
+            ).throttle(100),
+            class_name="w-full accent-violet-600",
+        ),
+        rx.el.div(
+            rx.el.span("0px"),
+            rx.el.span(f"{EditorState.selected_shape['stroke_width']}px"),
+            rx.el.span("20px"),
+            class_name="flex justify-between text-[10px] text-gray-400 mt-1",
+        ),
+        class_name="mb-6",
+    )
+
+
 def properties_panel() -> rx.Component:
     """The right-side properties panel."""
     return rx.el.aside(
@@ -36,40 +64,38 @@ def properties_panel() -> rx.Component:
                         ),
                         class_name="flex justify-between items-center mb-4 p-2 bg-gray-50 rounded-lg",
                     ),
-                    rx.cond(
-                        EditorState.selected_shape["type"] == "text",
-                        property_input("Text Content", "content"),
-                        rx.fragment(),
-                    ),
-                    property_input("Fill Color", "fill", "color"),
-                    property_input("Stroke Color", "stroke", "color"),
-                    rx.el.div(
-                        rx.el.label(
-                            "Stroke Width",
-                            class_name="block text-xs font-medium text-gray-500 mb-1",
-                        ),
-                        rx.el.input(
-                            type="range",
-                            min="0",
-                            max="20",
-                            default_value=EditorState.selected_shape[
-                                "stroke_width"
-                            ].to_string(),
-                            key=EditorState.selected_shape["id"],
-                            on_change=lambda val: EditorState.update_property(
-                                "stroke_width", val.to(int)
-                            ).throttle(100),
-                            class_name="w-full accent-violet-600",
-                        ),
-                        rx.el.div(
-                            rx.el.span("0px"),
-                            rx.el.span(
-                                f"{EditorState.selected_shape['stroke_width']}px"
+                    rx.match(
+                        EditorState.selected_shape["type"],
+                        (
+                            "text",
+                            rx.fragment(
+                                property_input("Text Content", "content"),
+                                property_input("Text Color", "fill", "color"),
                             ),
-                            rx.el.span("20px"),
-                            class_name="flex justify-between text-[10px] text-gray-400 mt-1",
                         ),
-                        class_name="mb-6",
+                        (
+                            "line",
+                            rx.fragment(
+                                property_input("Stroke Color", "stroke", "color"),
+                                stroke_width_control(),
+                            ),
+                        ),
+                        (
+                            "pencil",
+                            rx.fragment(
+                                property_input("Stroke Color", "stroke", "color"),
+                                stroke_width_control(),
+                            ),
+                        ),
+                        (
+                            "image",
+                            rx.fragment(),
+                        ),
+                        rx.fragment(
+                            property_input("Fill Color", "fill", "color"),
+                            property_input("Stroke Color", "stroke", "color"),
+                            stroke_width_control(),
+                        ),
                     ),
                     rx.el.button(
                         rx.icon("trash-2", class_name="w-4 h-4 mr-2"),
