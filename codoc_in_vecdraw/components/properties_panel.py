@@ -10,7 +10,8 @@ def property_input(label: str, prop: str, type_: str = "text") -> rx.Component:
             type=type_,
             on_change=lambda val: EditorState.update_property(prop, val),
             class_name="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none",
-            default_value=EditorState.selected_shape[prop].to_string(),
+            default_value=EditorState.selected_shape[prop],
+            key=EditorState.selected_shape["id"] + prop,
         ),
         class_name="mb-3",
     )
@@ -49,7 +50,7 @@ def properties_panel() -> rx.Component:
                             default_value=EditorState.selected_shape[
                                 "stroke_width"
                             ].to_string(),
-                            key=EditorState.selected_shape["stroke_width"].to_string(),
+                            key=EditorState.selected_shape["id"],
                             on_change=lambda val: EditorState.update_property(
                                 "stroke_width", val.to(int)
                             ).throttle(100),
