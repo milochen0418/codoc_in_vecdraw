@@ -31,12 +31,23 @@ def run():
 
         print("Page loaded. Uploading image...")
         
-        # Create a dummy image if it doesn't exist
         import os
-        if not os.path.exists("test_upload.png"):
-            with open("test_upload.png", "wb") as f:
+        files_to_upload = []
+
+        # 1. Create/Use dummy PNG
+        png_path = "test_upload.png"
+        if not os.path.exists(png_path):
+            with open(png_path, "wb") as f:
                 # Minimal valid PNG
                 f.write(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+        files_to_upload.append(png_path)
+
+        # 2. Use existing JPEG if available
+        jpg_path = "uploaded_files/jpg_test_file.jpg"
+        if os.path.exists(jpg_path):
+            files_to_upload.append(jpg_path)
+        else:
+            print(f"Warning: {jpg_path} not found, skipping.")
 
         # Handle file chooser
         try:
@@ -49,8 +60,8 @@ def run():
                 page.locator("#upload1").click()
             
             file_chooser = fc_info.value
-            file_chooser.set_files("test_upload.png")
-            print("File uploaded. Waiting for image to appear on canvas...")
+            file_chooser.set_files(files_to_upload)
+            print(f"Files {files_to_upload} uploaded. Waiting for image to appear on canvas...")
         except Exception as e:
             print(f"Error during upload interaction: {e}")
 
@@ -58,7 +69,7 @@ def run():
         # Wait for the SVG element to be present
         try:
             # Wait for an image tag inside the SVG
-            page.wait_for_selector("svg image", timeout=10000)
+            page.wait_for_selector("svg image", timeout=3000)
             print("Success! <image> element found in SVG.")
         except Exception as e:
             print(f"Timeout waiting for <image> element: {e}")
@@ -82,6 +93,13 @@ def run():
             
             # Check for the debug rect
             rects = page.locator('rect[fill="red"]').all()
+            green_rects = page.locator('rect[fill="green"]').all()
+            
+            if green_rects:
+                print(f"Found {len(green_rects)} debug GREEN rects! The SVG canvas is rendering correctly.")
+            else:
+                print("No debug GREEN rects found. The entire SVG canvas might be broken or not rendering.")
+
             if rects:
                 print(f"Found {len(rects)} debug RED rects! The shape is being rendered, but the image tag is missing or invalid.")
             else:
