@@ -1,6 +1,6 @@
 # Codoc in Vecdraw
 
-A vector drawing application built with [Reflex](https://reflex.dev/).
+A collaborative vector editor similar to Google Drawings, built with [Reflex](https://reflex.dev/).
 
 ## Features
 
