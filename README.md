@@ -35,3 +35,43 @@ poetry run reflex run
 ```
 
 The application will be available at [http://localhost:3000](http://localhost:3000).
+
+## Testing
+
+This project uses [Playwright](https://playwright.dev/python/) for end-to-end testing.
+
+### Prerequisites
+
+Install Playwright browsers:
+
+```bash
+poetry run playwright install
+```
+
+### Running Tests
+
+We provide a helper script `run_test_suite.sh` that handles the server lifecycle (starts the server in the background, runs the test, and cleans up afterwards).
+
+To run the default test (image upload debug):
+
+```bash
+bash run_test_suite.sh
+```
+
+To run a specific test case:
+
+```bash
+bash run_test_suite.sh debug_image/run_test.py
+```
+
+### Adding New Test Cases
+
+Test cases are located in the `testcases/` directory. To add a new test case:
+
+1. Create a new directory under `testcases/` (e.g., `testcases/my_feature/`).
+2. Create a Python script (e.g., `run_test.py`) inside that directory.
+3. Use the `run_test_suite.sh` script to execute it:
+
+```bash
+bash run_test_suite.sh my_feature/run_test.py
+```

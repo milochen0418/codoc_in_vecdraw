@@ -20,10 +20,11 @@ for ((i=1; i<=MAX_RETRIES; i++)); do
         echo "Server is up and running on ports 3000 & 8000!"
         
         # 4. Run the test script (Terminal B action)
+        TEST_SCRIPT=${1:-debug_image.py}
         echo "---------------------------------------------------"
-        echo "Running Playwright test (debug_image.py)..."
+        echo "Running Playwright test (testcases/$TEST_SCRIPT)..."
         echo "---------------------------------------------------"
-        poetry run python debug_image.py
+        poetry run python testcases/"$TEST_SCRIPT"
         TEST_EXIT_CODE=$?
         
         echo "---------------------------------------------------"

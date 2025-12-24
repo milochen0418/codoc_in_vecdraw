@@ -43,7 +43,7 @@ def run():
         files_to_upload.append(png_path)
 
         # 2. Use existing JPEG if available
-        jpg_path = "uploaded_files/jpg_test_file.jpg"
+        jpg_path = "testcases/debug_image/jpg_test_file.jpg"
         if os.path.exists(jpg_path):
             files_to_upload.append(jpg_path)
         else:
