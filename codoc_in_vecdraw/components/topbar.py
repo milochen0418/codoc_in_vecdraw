@@ -80,6 +80,21 @@ def topbar() -> rx.Component:
             rx.dialog.content(
                 rx.dialog.title("AI Operations"),
                 rx.dialog.description("Paste JSON operations here to control the canvas."),
+                rx.cond(
+                    EditorState.is_ai_docs_open,
+                    rx.box(
+                        rx.markdown("""
+### Supported Operations
+
+*   **addRect**: `{"op": "addRect", "x": 10, "y": 10, "width": 100, "height": 100, "fill": "red", "stroke": "black"}`
+*   **addEllipse**: `{"op": "addEllipse", "cx": 100, "cy": 100, "rx": 50, "ry": 50, "fill": "blue"}`
+*   **addText**: `{"op": "addText", "x": 10, "y": 10, "content": "Hello", "font_size": 20, "fill": "black"}`
+*   **addLine**: `{"op": "addLine", "x": 10, "y": 10, "end_x": 100, "end_y": 100, "stroke": "black", "stroke_width": 2}`
+*   **clear**: `{"op": "clear"}`
+                        """),
+                        class_name="p-4 bg-gray-50 rounded-md mb-4 text-sm overflow-y-auto max-h-60 border border-gray-200",
+                    ),
+                ),
                 rx.text_area(
                     value=EditorState.ai_ops_json,
                     on_change=EditorState.set_ai_ops_json,
@@ -87,12 +102,15 @@ def topbar() -> rx.Component:
                     class_name="h-64 font-mono text-sm my-4",
                 ),
                 rx.flex(
+                    rx.button("Docs", color_scheme="blue", variant="soft", on_click=EditorState.toggle_ai_docs),
+                    rx.spacer(),
                     rx.dialog.close(
                         rx.button("Cancel", color_scheme="gray", variant="soft", on_click=EditorState.toggle_ai_modal)
                     ),
                     rx.button("Run", on_click=EditorState.run_ai_ops),
                     spacing="3",
                     justify="end",
+                    width="100%",
                 ),
             ),
             open=EditorState.is_ai_modal_open,

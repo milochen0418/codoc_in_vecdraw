@@ -588,10 +588,15 @@ class EditorState(rx.SharedState):
     
     ai_ops_json: str = ""
     is_ai_modal_open: bool = False
+    is_ai_docs_open: bool = False
 
     @rx.event
     def toggle_ai_modal(self):
         self.is_ai_modal_open = not self.is_ai_modal_open
+
+    @rx.event
+    def toggle_ai_docs(self):
+        self.is_ai_docs_open = not self.is_ai_docs_open
 
     @rx.event
     def set_ai_ops_json(self, value: str):
