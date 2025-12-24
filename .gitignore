@@ -10,6 +10,8 @@ __pycache__/
 uploaded_files/
 reflex.log
 server.log
-debug_screenshot.png
+*_screenshot.png
 test_upload.png
-page_dump.html
+page_dump*.html
+testcases/**/*.png
+testcases/**/*.html
