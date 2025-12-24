@@ -39,8 +39,6 @@ def canvas() -> rx.Component:
                     width="100%", height="100%", fill="transparent", id="canvas-bg"
                 ),
                 rx.el.g(
-                    # Debug: Force render a test rect to see if SVG is working at all
-                    rx.el.rect(x=10, y=10, width=100, height=100, fill="green", id="debug-green-rect"),
                     rx.foreach(EditorState.shapes, render_shape),
                     rx.cond(EditorState.is_drawing, render_preview(), rx.fragment()),
                     style={
