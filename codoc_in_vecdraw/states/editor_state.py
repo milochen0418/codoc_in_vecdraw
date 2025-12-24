@@ -583,3 +583,104 @@ class EditorState(rx.SharedState):
             # Explicitly reassign shapes to ensure state update triggers
             self.shapes = self.shapes + [new_shape]
             self.selected_shape_id = new_shape["id"]
+
+    # --- AI Operations Interface ---
+    
+    ai_ops_json: str = ""
+    is_ai_modal_open: bool = False
+
+    @rx.event
+    def toggle_ai_modal(self):
+        self.is_ai_modal_open = not self.is_ai_modal_open
+
+    @rx.event
+    def set_ai_ops_json(self, value: str):
+        self.ai_ops_json = value
+
+    @rx.event
+    def run_ai_ops(self):
+        """Parse and execute AI operations from JSON."""
+        import json
+        try:
+            ops = json.loads(self.ai_ops_json)
+            if not isinstance(ops, list):
+                ops = [ops]
+            
+            self._save_to_history()
+            
+            for op in ops:
+                op_type = op.get("op")
+                
+                if op_type == "clear":
+                    self.shapes = []
+                    continue
+                
+                # Common properties
+                shape_id = op.get("id", str(uuid.uuid4()))
+                x = op.get("x", 0)
+                y = op.get("y", 0)
+                fill = op.get("fill", "#000000")
+                stroke = op.get("stroke", "none")
+                stroke_width = op.get("stroke_width", 1)
+                
+                new_shape: Shape = {
+                    "id": shape_id,
+                    "type": "rectangle", # default
+                    "x": x,
+                    "y": y,
+                    "width": 100,
+                    "height": 100,
+                    "fill": fill,
+                    "stroke": stroke,
+                    "stroke_width": stroke_width,
+                    "end_x": 0,
+                    "end_y": 0,
+                    "content": "",
+                    "points": [],
+                    "path_data": "",
+                    "src": "",
+                }
+
+                if op_type == "addRect" or op_type == "add_rectangle":
+                    new_shape["type"] = "rectangle"
+                    new_shape["width"] = op.get("width", 100)
+                    new_shape["height"] = op.get("height", 100)
+                
+                elif op_type == "addEllipse" or op_type == "add_ellipse":
+                    new_shape["type"] = "ellipse"
+                    # Support rx/ry or width/height
+                    if "rx" in op:
+                        new_shape["width"] = op["rx"] * 2
+                    else:
+                        new_shape["width"] = op.get("width", 100)
+                        
+                    if "ry" in op:
+                        new_shape["height"] = op["ry"] * 2
+                    else:
+                        new_shape["height"] = op.get("height", 100)
+                        
+                    # If cx/cy provided, adjust x/y to top-left
+                    if "cx" in op:
+                        new_shape["x"] = op["cx"] - new_shape["width"] / 2
+                    if "cy" in op:
+                        new_shape["y"] = op["cy"] - new_shape["height"] / 2
+
+                elif op_type == "addText" or op_type == "add_text":
+                    new_shape["type"] = "text"
+                    new_shape["content"] = op.get("content", "Text")
+                    new_shape["height"] = op.get("font_size", 20) # Map font_size to height for text
+                    
+                elif op_type == "addLine" or op_type == "add_line":
+                    new_shape["type"] = "line"
+                    new_shape["end_x"] = op.get("end_x", x + 100)
+                    new_shape["end_y"] = op.get("end_y", y + 100)
+                
+                self.shapes.append(new_shape)
+            
+            # Close modal on success
+            self.is_ai_modal_open = False
+            rx.toast("AI Operations executed successfully")
+            
+        except Exception as e:
+            print(f"Error executing AI ops: {e}")
+            rx.toast(f"Error: {str(e)}")

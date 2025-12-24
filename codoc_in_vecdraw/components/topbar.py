@@ -62,6 +62,12 @@ def topbar() -> rx.Component:
                     ),
                 ),
                 rx.el.button(
+                    rx.icon("bot", class_name="w-4 h-4 mr-2"),
+                    "AI Ops",
+                    on_click=EditorState.toggle_ai_modal,
+                    class_name="flex items-center text-sm font-medium bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg hover:bg-emerald-200 transition-colors mr-2",
+                ),
+                rx.el.button(
                     rx.icon("download", class_name="w-4 h-4 mr-2"),
                     "Export",
                     class_name="flex items-center text-sm font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors",
@@ -69,6 +75,28 @@ def topbar() -> rx.Component:
                 class_name="flex items-center",
             ),
             class_name="flex items-center justify-between px-6 py-3 h-16",
+        ),
+        rx.dialog.root(
+            rx.dialog.content(
+                rx.dialog.title("AI Operations"),
+                rx.dialog.description("Paste JSON operations here to control the canvas."),
+                rx.text_area(
+                    value=EditorState.ai_ops_json,
+                    on_change=EditorState.set_ai_ops_json,
+                    placeholder='[{"op": "addRect", "x": 10, "y": 10, "width": 100, "height": 100}]',
+                    class_name="h-64 font-mono text-sm my-4",
+                ),
+                rx.flex(
+                    rx.dialog.close(
+                        rx.button("Cancel", color_scheme="gray", variant="soft", on_click=EditorState.toggle_ai_modal)
+                    ),
+                    rx.button("Run", on_click=EditorState.run_ai_ops),
+                    spacing="3",
+                    justify="end",
+                ),
+            ),
+            open=EditorState.is_ai_modal_open,
+            on_open_change=EditorState.toggle_ai_modal,
         ),
         class_name="bg-white border-b border-gray-200 flex-shrink-0 z-10",
     )
