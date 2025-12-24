@@ -2,6 +2,18 @@
 
 A collaborative vector editor similar to Google Drawings, built with [Reflex](https://reflex.dev/).
 
+## Overview
+
+Codoc in Vecdraw brings the power of vector graphic editing to the web with a focus on simplicity and collaboration. Whether you are brainstorming ideas, creating technical diagrams, or just doodling, Codoc provides a shared space for creativity.
+
+### Application Interface
+![Application Interface](docs/images/current_demo.jpg)
+*A clean, intuitive interface with essential vector tools including rectangles, ellipses, lines, text, and freehand drawing.*
+
+### Real-time Collaboration
+![Collaboration Concept](docs/images/current_demo_concept.jpg)
+*Share your workspace instantly via a room link and collaborate with others in real-time.*
+
 ## Features
 
 - **Vector Drawing**: Create and manipulate shapes on an infinite canvas.
