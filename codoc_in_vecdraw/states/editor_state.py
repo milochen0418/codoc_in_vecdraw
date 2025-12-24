@@ -552,12 +552,17 @@ class EditorState(rx.SharedState):
         """Handle image upload."""
         for file in files:
             upload_data = await file.read()
-            outfile = rx.get_upload_dir() / file.filename
+            # Generate a safe filename using UUID to avoid encoding issues
+            ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+            safe_filename = f"{uuid.uuid4()}.{ext}"
+            
+            outfile = rx.get_upload_dir() / safe_filename
             with open(outfile, "wb") as f:
                 f.write(upload_data)
             
             # Add image shape
             self._save_to_history()
+            print(f"DEBUG: Adding image shape for {safe_filename}")
             new_shape: Shape = {
                 "id": str(uuid.uuid4()),
                 "type": "image",
@@ -573,7 +578,8 @@ class EditorState(rx.SharedState):
                 "content": "",
                 "points": [],
                 "path_data": "",
-                "src": file.filename,
+                "src": safe_filename,
             }
-            self.shapes.append(new_shape)
+            # Explicitly reassign shapes to ensure state update triggers
+            self.shapes = self.shapes + [new_shape]
             self.selected_shape_id = new_shape["id"]

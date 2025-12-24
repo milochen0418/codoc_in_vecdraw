@@ -144,19 +144,30 @@ def render_shape(shape: Shape) -> rx.Component:
         ),
         (
             "image",
-            rx.el.image(
-                href=rx.get_upload_url(shape["src"]),
-                x=shape["x"],
-                y=shape["y"],
-                width=shape["width"],
-                height=shape["height"],
-                class_name=rx.cond(
-                    is_selected,
-                    "cursor-move outline-none",
-                    "cursor-pointer hover:opacity-80 transition-opacity",
+            rx.fragment(
+                rx.el.rect(
+                    x=shape["x"], 
+                    y=shape["y"], 
+                    width=50, 
+                    height=50, 
+                    fill="red",
+                    stroke="blue"
                 ),
-                preserve_aspect_ratio="none",
-            ),
+                rx.el.image(
+                    href="/assets/favicon.ico", # Hardcoded valid image
+                    xlink_href="/assets/favicon.ico",
+                    x=shape["x"],
+                    y=shape["y"],
+                    width=shape["width"],
+                    height=shape["height"],
+                    class_name=rx.cond(
+                        is_selected,
+                        "cursor-move outline-none",
+                        "cursor-pointer hover:opacity-80 transition-opacity",
+                    ),
+                    preserve_aspect_ratio="none",
+                ),
+            )
         ),
         (
             "text",
