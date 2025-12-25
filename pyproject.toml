@@ -10,6 +10,8 @@ packages = [{include = "codoc_in_vecdraw"}]
 python = "^3.10"
 reflex = "0.8.23"
 reflex-mouse-track = "^0.0.1"
+mcp = "^1.25.0"
+fastapi = "^0.127.0"
 
 [build-system]
 requires = ["poetry-core"]

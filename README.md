@@ -14,10 +14,14 @@ Codoc in Vecdraw brings the power of vector graphic editing to the web with a fo
 ![Collaboration Concept](docs/images/current_demo_concept.jpg)
 *Share your workspace instantly via a room link and collaborate with others in real-time.*
 
+### Feature Demo
+[![Feature Demo](https://img.youtube.com/vi/qPKxzscEXRo/0.jpg)](https://www.youtube.com/watch?v=qPKxzscEXRo)
+
 ## Features
 
 - **Vector Drawing**: Create and manipulate shapes on an infinite canvas.
 - **Real-time Collaboration**: Share your drawing session with others via room links.
+- **AI Operations**: Control the canvas using JSON commands or via MCP (Model Context Protocol).
 - **Interactive UI**: Toolbar for selecting tools and a properties panel for adjusting shape attributes.
 
 ## Prerequisites
@@ -59,6 +63,27 @@ Install Playwright browsers:
 ```bash
 poetry run playwright install
 ```
+
+## MCP Server Integration
+
+This project includes an MCP (Model Context Protocol) server that allows AI assistants (like Claude Desktop or ChatGPT Atlas) to control the canvas.
+
+### Setup
+
+1. Ensure the Reflex app is running (`poetry run reflex run`).
+2. Run the MCP server:
+   ```bash
+   poetry run python mcp_server.py
+   ```
+   
+   *Note: This runs the MCP server over stdio, which is suitable for integration with local AI clients.*
+
+### Capabilities
+
+The MCP server exposes tools to:
+- Draw rectangles, circles, lines, and text.
+- Clear the canvas.
+- Target specific rooms via `room_id`.
 
 ### Running Tests
 

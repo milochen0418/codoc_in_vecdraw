@@ -5,7 +5,11 @@ import copy
 import random
 import string
 import dataclasses
+from collections import defaultdict
 
+# Global store for pending AI operations
+# Key: room_id (str), Value: list of op dicts
+PENDING_AI_OPS = defaultdict(list)
 
 @dataclasses.dataclass
 class Point:
@@ -689,3 +693,24 @@ class EditorState(rx.SharedState):
         except Exception as e:
             print(f"Error executing AI ops: {e}")
             rx.toast(f"Error: {str(e)}")
+
+    @rx.event
+    def check_pending_ai_ops(self):
+        """Poll for pending AI operations from external sources (MCP)."""
+        # Use current room_id or "default" if empty
+        target_room = self.room_id if self.room_id else "default"
+        
+        if target_room in PENDING_AI_OPS and PENDING_AI_OPS[target_room]:
+            ops = PENDING_AI_OPS[target_room]
+            # Clear the pending list immediately to avoid double processing
+            # Note: In a multi-threaded env this might need locking, but for Reflex/FastAPI simple usage this is usually fine
+            # We copy and clear
+            ops_to_run = list(ops)
+            PENDING_AI_OPS[target_room].clear()
+            
+            # Reuse the logic from run_ai_ops but without the JSON parsing part
+            # We can just set the JSON string and call run_ai_ops, or refactor.
+            # Let's refactor slightly or just construct the JSON string to reuse existing logic for simplicity
+            import json
+            self.ai_ops_json = json.dumps(ops_to_run)
+            return self.run_ai_ops()
