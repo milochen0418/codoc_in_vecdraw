@@ -15,3 +15,5 @@ test_upload.png
 page_dump*.html
 testcases/**/*.png
 testcases/**/*.html
+.DS_Store
+**/.DS_Store
