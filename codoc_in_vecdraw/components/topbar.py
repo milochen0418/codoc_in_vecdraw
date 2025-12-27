@@ -105,7 +105,7 @@ def topbar() -> rx.Component:
                     rx.button("Docs", color_scheme="blue", variant="soft", on_click=EditorState.toggle_ai_docs),
                     rx.spacer(),
                     rx.dialog.close(
-                        rx.button("Cancel", color_scheme="gray", variant="soft", on_click=EditorState.toggle_ai_modal)
+                        rx.button("Cancel", color_scheme="gray", variant="soft")
                     ),
                     rx.button("Run", on_click=EditorState.run_ai_ops),
                     spacing="3",
