@@ -5,6 +5,7 @@ import copy
 import random
 import string
 import json
+import base64
 import dataclasses
 from collections import defaultdict
 
@@ -696,9 +697,10 @@ class EditorState(rx.SharedState):
             rx.toast(f"Error: {str(e)}")
 
     @rx.var
-    def json_data(self) -> list[Shape]:
-        """Get the JSON representation of the current shapes."""
-        return self.shapes
+    def json_data_base64(self) -> str:
+        """Get the Base64 encoded JSON representation of the current shapes."""
+        json_str = json.dumps(self.shapes)
+        return base64.b64encode(json_str.encode("utf-8")).decode("utf-8")
 
     @rx.event
     def check_pending_ai_ops(self):

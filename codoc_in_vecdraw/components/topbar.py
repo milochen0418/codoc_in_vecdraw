@@ -76,7 +76,7 @@ def topbar() -> rx.Component:
                         ),
                     ),
                     rx.menu.content(
-                        rx.menu.item("Export as JSON", on_click=rx.download(data=EditorState.json_data, filename="drawing.json")),
+                        rx.menu.item("Export as JSON", on_click=rx.call_script(f"window.exportJSON(atob('{EditorState.json_data_base64}'))")),
                         rx.menu.item("Export as SVG", on_click=rx.call_script("window.exportSVG()")),
                         rx.menu.item("Export as PNG", on_click=rx.call_script("window.exportPNG()")),
                     ),

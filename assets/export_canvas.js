@@ -120,3 +120,41 @@ window.exportPNG = function() {
         document.body.removeChild(downloadLink);
     }
 }
+
+window.exportJSON = function(data) {
+    if (!data) {
+        console.error("No data to export");
+        return;
+    }
+    
+    let jsonString;
+    if (typeof data === 'string') {
+        // If it's already a string, try to parse it to ensure it's valid JSON, then re-stringify for pretty print
+        try {
+            const obj = JSON.parse(data);
+            jsonString = JSON.stringify(obj, null, 2);
+        } catch (e) {
+            // If parse fails, just use the string as is
+            jsonString = data;
+        }
+    } else {
+        // Convert object to JSON string with pretty printing
+        jsonString = JSON.stringify(data, null, 2);
+    }
+    
+    // Create a Blob from the JSON string
+    const blob = new Blob([jsonString], { type: "application/json" });
+    
+    // Create a URL for the Blob
+    const url = URL.createObjectURL(blob);
+    
+    const downloadLink = document.createElement("a");
+    downloadLink.href = url;
+    downloadLink.download = "drawing.json";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    
+    // Release the URL object
+    URL.revokeObjectURL(url);
+}
