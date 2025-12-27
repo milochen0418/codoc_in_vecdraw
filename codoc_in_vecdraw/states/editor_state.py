@@ -696,9 +696,9 @@ class EditorState(rx.SharedState):
             rx.toast(f"Error: {str(e)}")
 
     @rx.var
-    def json_data(self) -> str:
+    def json_data(self) -> list[Shape]:
         """Get the JSON representation of the current shapes."""
-        return json.dumps(self.shapes)
+        return self.shapes
 
     @rx.event
     def check_pending_ai_ops(self):

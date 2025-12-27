@@ -42,15 +42,9 @@ function getStyledSVG(svgId) {
     return clonedSvg;
 }
 
-window.exportSVG = function() {
-    const styledSvg = getStyledSVG("main-svg");
-    if (!styledSvg) {
-        console.error("SVG element not found");
-        return;
-    }
-
+function serializeSVG(svgNode) {
     const serializer = new XMLSerializer();
-    let source = serializer.serializeToString(styledSvg);
+    let source = serializer.serializeToString(svgNode);
     
     // Add name spaces.
     if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
@@ -59,6 +53,18 @@ window.exportSVG = function() {
     if(!source.match(/^<svg[^>]+xmlns:xlink="http\:\/\/www\.w3\.org\/1999\/xlink"/)){
         source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
     }
+    
+    return source;
+}
+
+window.exportSVG = function() {
+    const styledSvg = getStyledSVG("main-svg");
+    if (!styledSvg) {
+        console.error("SVG element not found");
+        return;
+    }
+
+    let source = serializeSVG(styledSvg);
 
     // Add xml declaration
     source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
@@ -80,8 +86,7 @@ window.exportPNG = function() {
         return;
     }
     
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(styledSvg);
+    const source = serializeSVG(styledSvg);
     
     const img = new Image();
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
