@@ -67,10 +67,19 @@ def topbar() -> rx.Component:
                     on_click=EditorState.toggle_ai_modal,
                     class_name="flex items-center text-sm font-medium bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg hover:bg-emerald-200 transition-colors mr-2",
                 ),
-                rx.el.button(
-                    rx.icon("download", class_name="w-4 h-4 mr-2"),
-                    "Export",
-                    class_name="flex items-center text-sm font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors",
+                rx.menu.root(
+                    rx.menu.trigger(
+                        rx.el.button(
+                            rx.icon("download", class_name="w-4 h-4 mr-2"),
+                            "Export",
+                            class_name="flex items-center text-sm font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors",
+                        ),
+                    ),
+                    rx.menu.content(
+                        rx.menu.item("Export as JSON", on_click=rx.download(data=EditorState.json_data, filename="drawing.json")),
+                        rx.menu.item("Export as SVG", on_click=rx.call_script("window.exportSVG()")),
+                        rx.menu.item("Export as PNG", on_click=rx.call_script("window.exportPNG()")),
+                    ),
                 ),
                 class_name="flex items-center",
             ),

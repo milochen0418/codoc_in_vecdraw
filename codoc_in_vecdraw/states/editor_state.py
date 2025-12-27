@@ -4,6 +4,7 @@ import uuid
 import copy
 import random
 import string
+import json
 import dataclasses
 from collections import defaultdict
 
@@ -693,6 +694,11 @@ class EditorState(rx.SharedState):
         except Exception as e:
             print(f"Error executing AI ops: {e}")
             rx.toast(f"Error: {str(e)}")
+
+    @rx.var
+    def json_data(self) -> str:
+        """Get the JSON representation of the current shapes."""
+        return json.dumps(self.shapes)
 
     @rx.event
     def check_pending_ai_ops(self):

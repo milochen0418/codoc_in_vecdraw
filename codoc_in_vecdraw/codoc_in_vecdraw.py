@@ -10,6 +10,7 @@ from fastapi import Request
 def index() -> rx.Component:
     """Main editor interface."""
     return rx.el.main(
+        rx.script(src="/export_canvas.js"),
         # Poll for AI ops every 1 second
         rx.moment(interval=1000, on_change=EditorState.check_pending_ai_ops, display="none"),
         topbar(),
