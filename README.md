@@ -28,7 +28,7 @@ For a deeper dive into the system design and architecture, see the design docume
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11 – 3.15 (Reflex 0.10 requires Python 3.11 or newer)
 - [Poetry](https://python-poetry.org/) for dependency management
 
 ## Installation

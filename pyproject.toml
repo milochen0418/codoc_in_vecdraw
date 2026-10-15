@@ -7,11 +7,11 @@ readme = "README.md"
 packages = [{include = "codoc_in_vecdraw"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
-reflex = "0.8.23"
+python = ">=3.11,<3.16"
+reflex = "0.10.0"
 reflex-mouse-track = "^0.0.1"
 mcp = "^1.25.0"
-fastapi = "^0.127.0"
+fastapi = "^0.143.1"
 
 [build-system]
 requires = ["poetry-core"]

@@ -13,18 +13,19 @@ If you already read them earlier in the session, **re-check** when unsure.
 
 ## 1) Python / Poetry requirements (strict)
 
-This project targets **Python 3.11**.
+This project supports **Python 3.11 – 3.15** (`python = ">=3.11,<3.16"` in `pyproject.toml`).
+Python 3.10 and older are not supported (Reflex 0.10 requires Python 3.11+).
 
 - Prefer Poetry-managed environments.
-- If Poetry selected another Python (e.g. 3.12+), switch it:
+- Any supported version is fine. If Poetry selected an unsupported Python (e.g. 3.10 or 3.16+), switch it:
 
 ```bash
-poetry env use python3.11
+poetry env use python3.11   # or python3.12 / python3.13 / python3.14 / python3.15
 poetry env info
 poetry install
 ```
 
-If `python3.11` is not available on PATH, use an absolute path to the 3.11 executable.
+If the chosen `python3.x` is not available on PATH, use an absolute path to that executable.
 
 ## 2) Default rule: use `poetry run` for scripts
 
