@@ -17,7 +17,9 @@ echo "Starting Reflex app with args: $@"
 
 # If this script is executed via `poetry run`, avoid nesting Poetry.
 if [ -n "${POETRY_ACTIVE:-}" ]; then
+  reflex db migrate
   reflex run "$@"
 else
+  poetry run reflex db migrate
   poetry run reflex run "$@"
 fi

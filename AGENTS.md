@@ -49,6 +49,7 @@ Notes:
 - Prefer `poetry run ./reflex_rerun.sh` over `poetry run reflex run`.
 - This keeps the app startup/restart behavior consistent and helps it run stably on the expected ports: frontend `3000`, backend `8000`.
 - If you must run Reflex directly, still do it via Poetry: `poetry run reflex run`.
+- Documents are stored in SQLite (`reflex.db`). `reflex_rerun.sh` and `run_test_suite.sh` apply migrations first; when running Reflex directly, run `poetry run reflex db migrate` before `reflex run`.
 
 ## 4) Running E2E suites: prefer `run_test_suite.sh`
 

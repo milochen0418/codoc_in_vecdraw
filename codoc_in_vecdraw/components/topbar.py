@@ -1,5 +1,25 @@
 import reflex as rx
+from codoc_in_vecdraw.states.doc_list_state import DocListState
 from codoc_in_vecdraw.states.editor_state import EditorState
+
+
+def title_editor() -> rx.Component:
+    """Inline-editable document title; saved on Enter or when the input loses focus."""
+    return rx.el.form(
+        rx.el.input(
+            id="doc-title",
+            name="title",
+            default_value=EditorState.doc_title,
+            # Remount when a collaborator renames the document.
+            key=EditorState.doc_id + ":" + EditorState.doc_title,
+            on_blur=EditorState.rename_document,
+            placeholder="Untitled drawing",
+            title="Rename this drawing",
+            class_name="w-56 text-lg font-bold text-gray-800 bg-transparent border border-transparent rounded-md px-2 py-0.5 hover:border-gray-200 focus:border-violet-400 focus:ring-1 focus:ring-violet-400 outline-none",
+        ),
+        on_submit=EditorState.rename_from_form,
+        reset_on_submit=False,
+    )
 
 
 def topbar() -> rx.Component:
@@ -7,9 +27,21 @@ def topbar() -> rx.Component:
     return rx.el.header(
         rx.el.div(
             rx.el.div(
-                rx.icon("shapes", class_name="w-6 h-6 text-violet-600 mr-2"),
-                rx.el.h1("Vector Editor", class_name="text-lg font-bold text-gray-800"),
-                class_name="flex items-center",
+                rx.el.a(
+                    rx.icon("folder-open", class_name="w-4 h-4"),
+                    "My Documents",
+                    href="/",
+                    class_name="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0",
+                ),
+                rx.el.div(class_name="w-px h-6 bg-gray-200 mx-3 flex-shrink-0"),
+                rx.icon("shapes", class_name="w-6 h-6 text-violet-600 mr-1 flex-shrink-0"),
+                title_editor(),
+                rx.el.span(
+                    EditorState.doc_id,
+                    title="Document ID",
+                    class_name="text-xs font-mono text-gray-400",
+                ),
+                class_name="flex items-center min-w-0",
             ),
             rx.el.div(
                 rx.el.div(
@@ -36,29 +68,29 @@ def topbar() -> rx.Component:
                     ),
                     class_name="text-sm text-gray-500 mr-4",
                 ),
-                rx.cond(
-                    EditorState.room_id != "",
-                    rx.fragment(
-                        rx.el.div(
-                            rx.el.span("Room: ", class_name="text-gray-500"),
-                            rx.el.span(
-                                EditorState.room_id,
-                                class_name="font-mono font-bold ml-1",
-                            ),
-                            class_name="text-xs mr-3 px-2 py-1 bg-gray-100 rounded border border-gray-200",
+                rx.el.button(
+                    rx.icon("link", class_name="w-4 h-4 mr-2"),
+                    "Copy Link",
+                    on_click=[
+                        rx.call_script(
+                            "navigator.clipboard.writeText(window.location.origin + window.location.pathname)"
                         ),
+                        rx.toast("Link copied: everyone who opens it edits this drawing with you"),
+                    ],
+                    title="Share this drawing for real-time co-editing",
+                    class_name="flex items-center text-sm font-medium bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-200 transition-colors mr-2",
+                ),
+                rx.menu.root(
+                    rx.menu.trigger(
                         rx.el.button(
-                            rx.icon("link", class_name="w-4 h-4 mr-2"),
-                            "Copy Link",
-                            on_click=EditorState.copy_room_link,
-                            class_name="flex items-center text-sm font-medium bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-200 transition-colors mr-2",
+                            rx.icon("file", class_name="w-4 h-4 mr-2"),
+                            "File",
+                            class_name="flex items-center text-sm font-medium bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors mr-2",
                         ),
                     ),
-                    rx.el.button(
-                        rx.icon("share-2", class_name="w-4 h-4 mr-2"),
-                        "Share Link",
-                        on_click=EditorState.create_room,
-                        class_name="flex items-center text-sm font-medium bg-violet-600 text-white px-3 py-1.5 rounded-lg hover:bg-violet-700 transition-colors mr-2",
+                    rx.menu.content(
+                        rx.menu.item("New drawing", on_click=DocListState.create_document),
+                        rx.menu.item("Duplicate", on_click=EditorState.duplicate_document),
                     ),
                 ),
                 rx.el.button(

@@ -8,7 +8,7 @@ packages = [{include = "codoc_in_vecdraw"}]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.16"
-reflex = "0.10.0"
+reflex = {version = "0.10.0", extras = ["db"]}
 reflex-mouse-track = "^0.0.1"
 mcp = "^1.25.0"
 fastapi = "^0.143.1"

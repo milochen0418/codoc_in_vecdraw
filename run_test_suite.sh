@@ -4,6 +4,9 @@
 echo "Cleaning up old Reflex processes..."
 lsof -ti:3000,8000 | xargs kill -9 2>/dev/null
 
+# Make sure the documents database schema is up to date.
+poetry run reflex db migrate
+
 # 2. Start server in background (simulating Terminal A)
 # We redirect input from /dev/null to prevent "suspended (tty input)" errors
 echo "Starting Reflex server in background..."

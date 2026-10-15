@@ -2,15 +2,20 @@ import reflex as rx
 from typing import TypedDict, Any
 import uuid
 import copy
-import random
-import string
 import json
 import base64
 import dataclasses
 from collections import defaultdict
 
+from codoc_in_vecdraw.states.document_store import (
+    DEFAULT_TITLE,
+    DOCUMENTS_STORE,
+    new_doc_id,
+    normalize_doc_id,
+)
+
 # Global store for pending AI operations
-# Key: room_id (str), Value: list of op dicts
+# Key: doc_id (str), Value: list of op dicts
 PENDING_AI_OPS = defaultdict(list)
 
 @dataclasses.dataclass
@@ -59,37 +64,92 @@ class EditorState(rx.SharedState):
     past: list[list[Shape]] = []
     future: list[list[Shape]] = []
     snapshot_shapes: list[Shape] = []
-    room_id: str = ""
+    doc_id: str = ""
+    doc_title: str = ""
     offset_x: int = 96
     offset_y: int = 64
 
+    # Version of the stored document this session holds, and the shapes last saved.
+    _doc_version: int = 0
+    _saved_shapes_json: str = "[]"
+
     @rx.event
     async def on_load(self):
-        """Handle page load to join room if specified."""
-        room_param = self.router.url.query_parameters.get("room")
-        if room_param:
-            self.room_id = room_param
-            safe_token = room_param.replace("_", "-")
-            await self._link_to(safe_token)
+        """Open /doc/<doc_id>; every client on the same document shares this state."""
+        raw_id = self.router.url.path.rstrip("/").rsplit("/", 1)[-1]
+        doc_id = normalize_doc_id(raw_id)
+        if not doc_id:
+            return rx.redirect("/")
+        if doc_id != raw_id:
+            return rx.redirect(f"/doc/{doc_id}")
+        # Set the document on the linked (shared) state, not on this private one.
+        doc = await self._link_to(doc_id)
+        doc._open_document(doc_id)
+
+    def _open_document(self, doc_id: str):
+        """Load the stored document unless this session already holds its latest version."""
+        stored = DOCUMENTS_STORE.get(doc_id)
+        if stored is not None and self.doc_id == doc_id and self._doc_version == stored["version"]:
+            return
+        if stored is None:
+            # As in codoc_in_md, opening /doc/<id> creates the document.
+            stored = DOCUMENTS_STORE.save(doc_id)
+        self.doc_id = doc_id
+        self.doc_title = stored["title"]
+        self.shapes = stored["shapes"]
+        self._doc_version = stored["version"]
+        self._saved_shapes_json = json.dumps(stored["shapes"])
+        self.selected_shape_id = ""
+        self.current_tool = "select"
+        self.is_drawing = False
+        self.is_dragging = False
+        self.is_panning = False
+        self.active_handle = ""
+        self.pan_x = 0
+        self.pan_y = 0
+        self.current_points = []
+        self.snapshot_shapes = []
+        self.past = []
+        self.future = []
+
+    def _persist(self):
+        """Save the shapes to the document store if they changed since the last save."""
+        if not self.doc_id:
+            return
+        shapes = copy.deepcopy(self.shapes)
+        shapes_json = json.dumps(shapes)
+        if shapes_json == self._saved_shapes_json:
+            return
+        self._doc_version = DOCUMENTS_STORE.save(self.doc_id, shapes=shapes)["version"]
+        self._saved_shapes_json = shapes_json
+
+    def _rename(self, title: str):
+        title = " ".join((title or "").split())[:100] or DEFAULT_TITLE
+        if not self.doc_id or title == self.doc_title:
+            return
+        self.doc_title = title
+        self._doc_version = DOCUMENTS_STORE.save(self.doc_id, title=title)["version"]
 
     @rx.event
-    def create_room(self):
-        """Generate a room ID, copy link, and redirect."""
-        new_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-        origin = self.router.headers.origin or "http://localhost:3000"
-        full_url = f"{origin}/?room={new_id}"
-        return [
-            rx.set_clipboard(full_url),
-            rx.toast("Link copied! Redirecting to new room..."),
-            rx.redirect(f"/?room={new_id}"),
-        ]
+    def rename_document(self, title: str):
+        """Rename the document (title input lost focus)."""
+        self._rename(title)
 
     @rx.event
-    def copy_room_link(self):
-        """Copy the current room link to clipboard."""
-        origin = self.router.headers.origin or "http://localhost:3000"
-        full_url = f"{origin}/?room={self.room_id}"
-        return [rx.set_clipboard(full_url), rx.toast("Share link copied to clipboard")]
+    def rename_from_form(self, form_data: dict):
+        """Rename the document (Enter pressed in the title input)."""
+        self._rename(form_data.get("title", ""))
+
+    @rx.event
+    def duplicate_document(self):
+        """Copy this drawing into a new document and open it."""
+        if not self.doc_id:
+            return
+        new_id = new_doc_id()
+        DOCUMENTS_STORE.save(
+            new_id, shapes=copy.deepcopy(self.shapes), title=f"{self.doc_title} (copy)"[:100]
+        )
+        return rx.redirect(f"/doc/{new_id}")
 
     @rx.var
     def selected_shape(self) -> Shape:
@@ -282,6 +342,7 @@ class EditorState(rx.SharedState):
             self.shapes.append(new_shape)
             self.selected_shape_id = new_shape["id"]
             self.set_tool("select")
+            self._persist()
         elif self.current_tool == "pencil":
             self.is_drawing = True
             self.selected_shape_id = ""
@@ -505,6 +566,7 @@ class EditorState(rx.SharedState):
         self.is_dragging = False
         self.snapshot_shapes = []
         self.current_points = []
+        self._persist()
 
     @rx.event
     def select_shape(self, shape_id: str):
@@ -527,6 +589,7 @@ class EditorState(rx.SharedState):
             else:
                 new_shapes.append(shape)
         self.shapes = new_shapes
+        self._persist()
 
     @rx.event
     def delete_selected(self):
@@ -536,6 +599,7 @@ class EditorState(rx.SharedState):
         self._save_to_history()
         self.shapes = [s for s in self.shapes if s["id"] != self.selected_shape_id]
         self.selected_shape_id = ""
+        self._persist()
 
     @rx.event
     def undo(self):
@@ -544,6 +608,7 @@ class EditorState(rx.SharedState):
             self.future.append(copy.deepcopy(self.shapes))
             self.shapes = self.past.pop()
             self.selected_shape_id = ""
+            self._persist()
 
     @rx.event
     def redo(self):
@@ -552,6 +617,7 @@ class EditorState(rx.SharedState):
             self.past.append(copy.deepcopy(self.shapes))
             self.shapes = self.future.pop()
             self.selected_shape_id = ""
+            self._persist()
 
     @rx.event
     async def handle_upload(self, files: list[rx.UploadFile]):
@@ -589,6 +655,7 @@ class EditorState(rx.SharedState):
             # Explicitly reassign shapes to ensure state update triggers
             self.shapes = self.shapes + [new_shape]
             self.selected_shape_id = new_shape["id"]
+        self._persist()
 
     # --- AI Operations Interface ---
     
@@ -687,7 +754,8 @@ class EditorState(rx.SharedState):
                     new_shape["end_y"] = op.get("end_y", y + 100)
                 
                 self.shapes.append(new_shape)
-            
+            self._persist()
+
             # Close modal on success
             self.is_ai_modal_open = False
             rx.toast("AI Operations executed successfully")
@@ -705,16 +773,16 @@ class EditorState(rx.SharedState):
     @rx.event
     def check_pending_ai_ops(self):
         """Poll for pending AI operations from external sources (MCP)."""
-        # Use current room_id or "default" if empty
-        target_room = self.room_id if self.room_id else "default"
-        
-        if target_room in PENDING_AI_OPS and PENDING_AI_OPS[target_room]:
-            ops = PENDING_AI_OPS[target_room]
+        # Operations are queued per document id.
+        target_doc = self.doc_id
+
+        if target_doc and PENDING_AI_OPS.get(target_doc):
+            ops = PENDING_AI_OPS[target_doc]
             # Clear the pending list immediately to avoid double processing
             # Note: In a multi-threaded env this might need locking, but for Reflex/FastAPI simple usage this is usually fine
             # We copy and clear
             ops_to_run = list(ops)
-            PENDING_AI_OPS[target_room].clear()
+            PENDING_AI_OPS[target_doc].clear()
             
             # Reuse the logic from run_ai_ops but without the JSON parsing part
             # We can just set the JSON string and call run_ai_ops, or refactor.

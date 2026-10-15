@@ -22,7 +22,8 @@ For a deeper dive into the system design and architecture, see the design docume
 ## Features
 
 - **Vector Drawing**: Create and manipulate shapes on an infinite canvas.
-- **Real-time Collaboration**: Share your drawing session with others via room links.
+- **Document Manager**: The home page lists every saved drawing (with a preview), with search, filters and delete. Each drawing lives at `/doc/<doc_id>` and is saved automatically.
+- **Real-time Collaboration**: Everyone who opens the same `/doc/<doc_id>` link edits that drawing together.
 - **AI Operations**: Control the canvas using JSON commands or via MCP (Model Context Protocol).
 - **Interactive UI**: Toolbar for selecting tools and a properties panel for adjusting shape attributes.
 
@@ -44,15 +45,27 @@ For a deeper dive into the system design and architecture, see the design docume
    poetry install
    ```
 
+3. Create the documents database (SQLite file `reflex.db`, schema managed by the migrations in `alembic/`):
+   ```bash
+   poetry run reflex db migrate
+   ```
+
 ## Running the Application
 
-Start the development server:
+Start the development server (`reflex_rerun.sh` also applies pending database migrations first):
 
 ```bash
-poetry run reflex run
+poetry run ./reflex_rerun.sh
 ```
 
 The application will be available at [http://localhost:3000](http://localhost:3000).
+
+## Documents and Collaboration
+
+- **Home page (`/`)** is the document manager: click **New Document** to start a drawing, or open an existing one from the list. Search matches the title, text inside the drawing and the doc ID.
+- **Each drawing has its own URL**, `/doc/<doc_id>`. Changes are saved automatically; rename a drawing by editing its title in the top bar.
+- **To co-edit**, click **Copy Link** in the editor and open the link in another browser: both see each other's changes in real time.
+- Older share links of the form `/?room=<id>` open the drawing `/doc/<id>`.
 
 ## Testing
 
@@ -85,7 +98,7 @@ This project includes an MCP (Model Context Protocol) server that allows AI assi
 The MCP server exposes tools to:
 - Draw rectangles, circles, lines, and text.
 - Clear the canvas.
-- Target specific rooms via `room_id`.
+- Target a drawing via `doc_id` (the id in `/doc/<doc_id>`, default `default`). The drawing must be open in a browser for the operations to be applied.
 
 ### Running Tests
 
@@ -101,7 +114,10 @@ To run a specific test case:
 
 ```bash
 bash run_test_suite.sh debug_image/run_test.py
+bash run_test_suite.sh doc_manager/run_test.py
 ```
+
+The tests run headless; set `HEADLESS=0` to watch the browser, and `BASE_URL` to test a server on another address. Each test works on its own document and deletes it when it finishes.
 
 ### Adding New Test Cases
 

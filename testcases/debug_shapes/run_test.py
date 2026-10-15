@@ -1,14 +1,28 @@
 from playwright.sync_api import sync_playwright
+import os
 import time
+
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:3000").rstrip("/")
+HEADLESS = os.environ.get("HEADLESS", "1") != "0"
+# Each run draws on a fresh document, deleted again when the test ends.
+DOC_ID = f"e2e-debug-shapes-{int(time.time())}"
+DOC_URL = f"{BASE_URL}/doc/{DOC_ID}"
+
+
+def delete_test_document():
+    from codoc_in_vecdraw.states.document_store import DOCUMENTS_STORE
+
+    del DOCUMENTS_STORE[DOC_ID]
+
 
 def run():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, slow_mo=1000)
+        browser = p.chromium.launch(headless=HEADLESS, slow_mo=1000)
         page = browser.new_page()
-        
-        print("Navigating to http://127.0.0.1:3000...")
+
+        print(f"Navigating to {DOC_URL}...")
         try:
-            page.goto("http://127.0.0.1:3000", timeout=10000, wait_until="domcontentloaded")
+            page.goto(DOC_URL, timeout=10000, wait_until="domcontentloaded")
         except Exception as e:
             print(f"Navigation failed: {e}")
             browser.close()
@@ -72,4 +86,7 @@ def run():
         browser.close()
 
 if __name__ == "__main__":
-    run()
+    try:
+        run()
+    finally:
+        delete_test_document()

@@ -1,2 +1,2 @@
-reflex==0.10.0
+reflex[db]==0.10.0
 reflex-mouse-track
