@@ -15,6 +15,8 @@ config = rx.Config(
                     "./app/**/*.{js,ts,jsx,tsx}",
                     "./utils/**/*.{js,ts,jsx,tsx}",
                     "./app_components/**/*.{js,ts,jsx,tsx}",
+                    # The editor is a React component of our own (assets/vecdraw).
+                    "./public/vecdraw/**/*.{js,jsx}",
                 ],
             },
         ),

@@ -1,30 +1,43 @@
 """State for the document manager page (/)."""
 
+import asyncio
 import datetime
 import time
 from typing import TypedDict
 
 import reflex as rx
 
+from codoc_in_vecdraw import presence, saving
 from codoc_in_vecdraw.states.document_store import (
     DOCUMENTS_STORE,
     new_doc_id,
     normalize_doc_id,
     render_thumbnail,
 )
+from codoc_in_vecdraw.states.editor_state import document_gone
+from codoc_in_vecdraw.states.ui_state import UiState
 
 SEARCH_INPUT_ID = "doc-list-search"
+
+
+class Person(TypedDict):
+    name: str
+    initials: str
+    color: str
+    avatar: str
 
 
 class DocListItem(TypedDict):
     doc_id: str
     title: str
+    by: str
     updated_at: float
     formatted_time: str
     shape_count: int
     is_empty: bool
     snippet: str
     thumbnail: str
+    people: list[Person]
 
 
 class DocListState(rx.State):
@@ -49,23 +62,30 @@ class DocListState(rx.State):
         return bool(self.search.strip() or self.time_filter != "any" or self.only_empty)
 
     @rx.event
-    def load_documents(self):
+    async def load_documents(self):
         """Load all documents from the store, then apply the current filters."""
         # Share links used to be /?room=<id>; that room is now the document /doc/<id>.
         room = normalize_doc_id(self.router.url.query_parameters.get("room", ""))
         if room:
             return rx.redirect(f"/doc/{room}")
-        self._reload()
+        await self._reload()
 
-    def _reload(self):
+    @rx.event
+    def refresh_people(self):
+        """Shows who is on each drawing now (every few seconds while the list is open)."""
+        self._apply_filters()
+
+    async def _reload(self):
+        await saving.settle()  # drawings open right now: the list shows them as they are
         all_docs: list[DocListItem] = []
         texts: dict[str, str] = {}
-        for d in DOCUMENTS_STORE.values():
+        for d in await asyncio.to_thread(DOCUMENTS_STORE.values):
             shapes = d["shapes"]
             all_docs.append(
                 DocListItem(
                     doc_id=d["doc_id"],
                     title=d["title"],
+                    by=d["created_by_name"],
                     updated_at=d["updated_at"],
                     formatted_time=(
                         datetime.datetime.fromtimestamp(d["updated_at"]).strftime("%Y-%m-%d %H:%M")
@@ -76,6 +96,7 @@ class DocListState(rx.State):
                     is_empty=not shapes,
                     snippet="",
                     thumbnail=render_thumbnail(shapes),
+                    people=[],
                 )
             )
             texts[d["doc_id"]] = " ".join(
@@ -92,6 +113,7 @@ class DocListState(rx.State):
         day = 86400
         start_of_today = time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1))
         query = self.search.strip().lower()
+        watching = presence.watching()
 
         result: list[DocListItem] = []
         for d in self._all_docs:
@@ -117,7 +139,11 @@ class DocListState(rx.State):
                 start = max(0, pos - 40)
                 end = min(len(text), pos + len(query) + 60)
                 snippet = ("…" if start > 0 else "") + text[start:end] + ("…" if end < len(text) else "")
-            result.append({**d, "snippet": snippet})
+            people = [
+                Person(name=p["name"], initials=presence.initials(p["name"]), color=p["color"], avatar=p["avatar"])
+                for p in watching.get(d["doc_id"], [])
+            ]
+            result.append({**d, "snippet": snippet, "people": people})
 
         if self.sort_by == "updated_asc":
             result.sort(key=lambda d: d["updated_at"])
@@ -165,27 +191,31 @@ class DocListState(rx.State):
         return rx.set_value(SEARCH_INPUT_ID, "")
 
     @rx.event
-    def create_document(self):
+    async def create_document(self):
         """Create an empty drawing and open it."""
+        ui = await self.get_state(UiState)
         doc_id = new_doc_id()
-        DOCUMENTS_STORE.save(doc_id)
+        await asyncio.to_thread(DOCUMENTS_STORE.create, doc_id, creator=await ui._creator())
         return rx.redirect(f"/doc/{doc_id}")
 
+    async def _delete(self, doc_ids: list[str]):
+        """Deletes drawings; whoever has one open sees it was deleted."""
+        for doc_id in doc_ids:
+            await asyncio.to_thread(DOCUMENTS_STORE.__delitem__, doc_id)
+            await document_gone(doc_id)
+        await self._reload()
+
     @rx.event
-    def delete_document(self, doc_id: str):
+    async def delete_document(self, doc_id: str):
         """Delete a single document and refresh the list."""
-        del DOCUMENTS_STORE[doc_id]
-        self._reload()
+        await self._delete([doc_id])
 
     @rx.event
-    def delete_filtered_documents(self):
+    async def delete_filtered_documents(self):
         """Delete every document in the current filtered view."""
-        for d in self.documents:
-            del DOCUMENTS_STORE[d["doc_id"]]
-        self._reload()
+        await self._delete([d["doc_id"] for d in self.documents])
 
     @rx.event
-    def clear_all_documents(self):
+    async def clear_all_documents(self):
         """Delete ALL documents."""
-        DOCUMENTS_STORE.clear()
-        self._reload()
+        await self._delete([d["doc_id"] for d in self._all_docs])

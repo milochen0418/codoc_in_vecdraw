@@ -1,2 +1,3 @@
 reflex[db]==0.10.0
-reflex-mouse-track
+pycrdt>=0.14
+pillow>=11

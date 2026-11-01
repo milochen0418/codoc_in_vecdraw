@@ -1,0 +1,6 @@
+# Extra URL paths that re-ddns' nginx should send to the backend (Reflex/Starlette) port instead
+# of the frontend port. One path per line; comments (#) and blank lines are ignored.
+
+# The shared drawings (Yjs WebSocket), a closing tab's goodbye (navigator.sendBeacon), and the
+# images placed in a drawing.
+/_vecdraw/

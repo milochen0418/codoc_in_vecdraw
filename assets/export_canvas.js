@@ -1,134 +1,127 @@
-function getStyledSVG(svgId) {
-    const svg = document.getElementById(svgId);
-    if (!svg) return null;
+// Export the drawing: all of it, whatever part of the canvas is in view, and only the shapes: not
+// selections, pointers or anyone's names.
 
-    // Clone the SVG node to avoid modifying the DOM
-    const clonedSvg = svg.cloneNode(true);
+const SVG_NS = "http://www.w3.org/2000/svg";
+const EXPORT_PAD = 16;
 
-    // Get all elements from the original and cloned SVG
-    // We need to traverse them in parallel to copy computed styles
-    const originalElements = svg.getElementsByTagName('*');
-    const clonedElements = clonedSvg.getElementsByTagName('*');
+function drawingBox(layer) {
+    const box = layer.getBBox();
+    return {
+        x: box.x - EXPORT_PAD,
+        y: box.y - EXPORT_PAD,
+        width: Math.max(box.width, 1) + 2 * EXPORT_PAD,
+        height: Math.max(box.height, 1) + 2 * EXPORT_PAD,
+    };
+}
 
-    // Styles to preserve
-    const stylesToCopy = [
-        "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-dasharray",
-        "font-family", "font-size", "font-weight", "font-style", "text-anchor", "dominant-baseline",
-        "opacity", "visibility"
-    ];
-
-    // Copy styles from root
-    const rootStyle = window.getComputedStyle(svg);
-    stylesToCopy.forEach(prop => {
-        clonedSvg.style[prop] = rootStyle.getPropertyValue(prop);
+function dataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
     });
+}
 
-    // Copy styles for all descendants
-    for (let i = 0; i < originalElements.length; i++) {
-        const original = originalElements[i];
-        const cloned = clonedElements[i];
-        
-        const computedStyle = window.getComputedStyle(original);
-        
-        stylesToCopy.forEach(prop => {
-            const value = computedStyle.getPropertyValue(prop);
-            // Only apply if it has a value
-            if (value) {
-                cloned.style[prop] = value;
-            }
-        });
+// Images go in the file itself: outside the app their addresses mean nothing, and a picture drawn
+// from an SVG in memory (the PNG export) can't load anything from elsewhere.
+async function embedImages(svg) {
+    for (const image of svg.querySelectorAll("image")) {
+        try {
+            const response = await fetch(image.getAttribute("href"));
+            image.setAttribute("href", await dataURL(await response.blob()));
+        } catch (e) {
+            console.error("Image not exported", e);
+        }
     }
+}
 
-    return clonedSvg;
+async function drawingSVG() {
+    const layer = document.getElementById("shapes-layer");
+    if (!layer) {
+        console.error("SVG element not found");
+        return null;
+    }
+    const box = drawingBox(layer);
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("xmlns", SVG_NS);
+    svg.setAttribute("viewBox", `${box.x} ${box.y} ${box.width} ${box.height}`);
+    svg.setAttribute("width", box.width);
+    svg.setAttribute("height", box.height);
+
+    const copy = layer.cloneNode(true);
+    copy.removeAttribute("id");
+    copy.removeAttribute("style");
+    // What only the editor needs: the wide invisible strokes that make thin shapes easy to click.
+    copy.querySelectorAll("[data-hit]").forEach((el) => el.remove());
+    copy.querySelectorAll("*").forEach((el) => {
+        el.removeAttribute("class");
+        el.removeAttribute("data-shape");
+        el.removeAttribute("pointer-events");
+    });
+    svg.appendChild(copy);
+    await embedImages(svg);
+    return { svg, box };
 }
 
 function serializeSVG(svgNode) {
-    const serializer = new XMLSerializer();
-    let source = serializer.serializeToString(svgNode);
-    
-    // Add name spaces.
-    if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
-        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-    }
-    if(!source.match(/^<svg[^>]+xmlns:xlink="http\:\/\/www\.w3\.org\/1999\/xlink"/)){
-        source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
-    }
-    
-    return source;
+    return new XMLSerializer().serializeToString(svgNode);
 }
 
-window.exportSVG = function() {
-    const styledSvg = getStyledSVG("main-svg");
-    if (!styledSvg) {
-        console.error("SVG element not found");
-        return;
-    }
-
-    let source = serializeSVG(styledSvg);
-
-    // Add xml declaration
-    source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
-
-    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
-    
+function download(href, filename) {
     const downloadLink = document.createElement("a");
-    downloadLink.href = url;
-    downloadLink.download = "drawing.svg";
+    downloadLink.href = href;
+    downloadLink.download = filename;
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
 }
 
-window.exportPNG = function() {
-    const styledSvg = getStyledSVG("main-svg");
-    if (!styledSvg) {
-        console.error("SVG element not found");
-        return;
-    }
-    
-    const source = serializeSVG(styledSvg);
-    
+window.exportSVG = async function() {
+    const drawing = await drawingSVG();
+    if (!drawing) return;
+
+    // Add xml declaration
+    const source = '<?xml version="1.0" standalone="no"?>\r\n' + serializeSVG(drawing.svg);
+
+    download("data:image/svg+xml;charset=utf-8," + encodeURIComponent(source), "drawing.svg");
+};
+
+window.exportPNG = async function() {
+    const drawing = await drawingSVG();
+    if (!drawing) return;
+    const { svg, box } = drawing;
+
     const img = new Image();
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source);
-    
     img.onload = function() {
-        const canvas = document.createElement('canvas');
-        // Use the original SVG for dimensions
-        const originalSvg = document.getElementById("main-svg");
-        const rect = originalSvg.getBoundingClientRect();
-        
+        const canvas = document.createElement("canvas");
+
         // Handle high DPI screens
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        
-        const ctx = canvas.getContext('2d');
+        canvas.width = box.width * dpr;
+        canvas.height = box.height * dpr;
+
+        const ctx = canvas.getContext("2d");
         ctx.scale(dpr, dpr);
-        
+
         ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, rect.width, rect.height);
-        
-        ctx.drawImage(img, 0, 0, rect.width, rect.height);
-        
-        const imgURL = canvas.toDataURL('image/png');
-        
-        const downloadLink = document.createElement("a");
-        downloadLink.href = imgURL;
-        downloadLink.download = "drawing.png";
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-    }
-}
+        ctx.fillRect(0, 0, box.width, box.height);
+
+        ctx.drawImage(img, 0, 0, box.width, box.height);
+
+        download(canvas.toDataURL("image/png"), "drawing.png");
+    };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(serializeSVG(svg));
+};
 
 window.exportJSON = function(data) {
     if (!data) {
         console.error("No data to export");
         return;
     }
-    
+
     let jsonString;
-    if (typeof data === 'string') {
+    if (typeof data === "string") {
         // If it's already a string, try to parse it to ensure it's valid JSON, then re-stringify for pretty print
         try {
             const obj = JSON.parse(data);
@@ -141,20 +134,15 @@ window.exportJSON = function(data) {
         // Convert object to JSON string with pretty printing
         jsonString = JSON.stringify(data, null, 2);
     }
-    
+
     // Create a Blob from the JSON string
     const blob = new Blob([jsonString], { type: "application/json" });
-    
+
     // Create a URL for the Blob
     const url = URL.createObjectURL(blob);
-    
-    const downloadLink = document.createElement("a");
-    downloadLink.href = url;
-    downloadLink.download = "drawing.json";
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    
+
+    download(url, "drawing.json");
+
     // Release the URL object
     URL.revokeObjectURL(url);
-}
+};

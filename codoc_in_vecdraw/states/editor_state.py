@@ -1,77 +1,81 @@
-import reflex as rx
-from typing import TypedDict, Any
-import uuid
-import copy
-import json
-import base64
-import dataclasses
-from collections import defaultdict
+"""A drawing's room: what everybody on /doc/<id> sees around the canvas, pushed to all of them.
 
+``EditorState`` is a Reflex ``SharedState``: every tab on a drawing links its state to the
+drawing's id. The shapes are not in it: they travel in the room's Yjs document
+(:mod:`codoc_in_vecdraw.yjs_ws`), straight between the browsers and the server, and reach the
+store from there (:mod:`codoc_in_vecdraw.saving`). Tools, the part of the canvas in view and
+what someone selected are each person's own: they live in the browser
+(``assets/vecdraw/editor.jsx``), and the others get a hint of them through the document's
+awareness. What is left for this room is what the page draws with Reflex: the title, the people
+on the drawing, and its call.
+"""
+
+import asyncio
+import json
+import logging
+
+import reflex as rx
+from reflex_ddns_auth import rooms
+
+from codoc_in_vecdraw import call, presence, saving, yjs_ws
 from codoc_in_vecdraw.states.document_store import (
     DEFAULT_TITLE,
     DOCUMENTS_STORE,
+    DocumentGone,
     new_doc_id,
     normalize_doc_id,
 )
+from codoc_in_vecdraw.states.ui_state import UiState
 
-# Global store for pending AI operations
-# Key: doc_id (str), Value: list of op dicts
-PENDING_AI_OPS = defaultdict(list)
+logger = logging.getLogger(__name__)
 
-@dataclasses.dataclass
-class Point:
-    x: int
-    y: int
-
-
-class Shape(TypedDict):
-    id: str
-    type: str
-    x: int
-    y: int
-    width: int
-    height: int
-    fill: str
-    stroke: str
-    stroke_width: int
-    end_x: int
-    end_y: int
-    content: str
-    points: list[dict[str, int]]
-    path_data: str
-    src: str
+_tasks: set[asyncio.Task] = set()
+_opening = asyncio.Lock()
 
 
 class EditorState(rx.SharedState):
-    """State for the Vector Graphics Editor."""
+    """State around the Vector Graphics Editor."""
 
-    shapes: list[Shape] = []
-    selected_shape_id: str = ""
-    current_tool: str = "select"
-    is_drawing: bool = False
-    is_dragging: bool = False
-    is_panning: bool = False
-    active_handle: str = ""
-    start_x: int = 0
-    start_y: int = 0
-    current_x: int = 0
-    current_y: int = 0
-    drag_offset_x: int = 0
-    drag_offset_y: int = 0
-    pan_x: int = 0
-    pan_y: int = 0
-    current_points: list[dict[str, int]] = []
-    past: list[list[Shape]] = []
-    future: list[list[Shape]] = []
-    snapshot_shapes: list[Shape] = []
     doc_id: str = ""
     doc_title: str = ""
-    offset_x: int = 96
-    offset_y: int = 64
+    # The drawing was deleted while people had it open.
+    gone: bool = False
+    # One entry per tab on the drawing: {"id", "user", "name", "avatar", "color"}.
+    peers: list[dict[str, str]] = []
+    # The drawing's call (codoc_in_vecdraw.call): how many are in it, who is ringing everyone
+    # (while it rings), the people it rings (those here when it started), and who joined or
+    # declined.
+    call_count: int = 0
+    call_ringing_from: str = ""
+    call_invited: list[str] = []
+    call_responded: list[str] = []
 
-    # Version of the stored document this session holds, and the shapes last saved.
-    _doc_version: int = 0
-    _saved_shapes_json: str = "[]"
+    @rx.var
+    def people(self) -> list[dict[str, str]]:
+        """One entry per person: several tabs of one person count once."""
+        out: list[dict[str, str]] = []
+        seen = set()
+        for p in self.peers:
+            user = p.get("user") or p.get("id")
+            if user in seen:
+                continue
+            seen.add(user)
+            name = p.get("name", "") or "?"
+            out.append(
+                {
+                    "id": p.get("id", ""),
+                    "user": user,
+                    "name": name,
+                    "initials": presence.initials(name),
+                    "color": p.get("color", ""),
+                    "avatar": p.get("avatar", ""),
+                }
+            )
+        return out
+
+    @rx.var
+    def people_count(self) -> int:
+        return len({p.get("user") or p.get("id") for p in self.peers})
 
     @rx.event
     async def on_load(self):
@@ -82,711 +86,149 @@ class EditorState(rx.SharedState):
             return rx.redirect("/")
         if doc_id != raw_id:
             return rx.redirect(f"/doc/{doc_id}")
+        ui = await self.get_state(UiState)
+        await ui._identify()
+        # One at a time: two people can open a new link at the same moment.
+        async with _opening:
+            stored = await asyncio.to_thread(DOCUMENTS_STORE.get, doc_id)
+            if stored is None:
+                # As in codoc_in_md, opening /doc/<id> creates the document. The server may still
+                # hold a room of that id: its drawing was deleted on the storage page.
+                await yjs_ws.close(doc_id)
+                saving.revive(doc_id)
+                creator = await ui._creator()
+                stored = await asyncio.to_thread(DOCUMENTS_STORE.create, doc_id, creator=creator)
         # Set the document on the linked (shared) state, not on this private one.
         doc = await self._link_to(doc_id)
-        doc._open_document(doc_id)
+        doc.doc_id = doc_id
+        doc.doc_title = stored["title"]
+        doc.gone = False
+        # What this event changes reaches only this tab: Reflex passes a room's changes on to its
+        # other tabs from events that start out linked. The others hear about this tab in this
+        # follow-up event.
+        return [EditorState.join_room, _page_title(stored["title"])]
 
-    def _open_document(self, doc_id: str):
-        """Load the stored document unless this session already holds its latest version."""
-        stored = DOCUMENTS_STORE.get(doc_id)
-        if stored is not None and self.doc_id == doc_id and self._doc_version == stored["version"]:
-            return
-        if stored is None:
-            # As in codoc_in_md, opening /doc/<id> creates the document.
-            stored = DOCUMENTS_STORE.save(doc_id)
-        self.doc_id = doc_id
-        self.doc_title = stored["title"]
-        self.shapes = stored["shapes"]
-        self._doc_version = stored["version"]
-        self._saved_shapes_json = json.dumps(stored["shapes"])
-        self.selected_shape_id = ""
-        self.current_tool = "select"
-        self.is_drawing = False
-        self.is_dragging = False
-        self.is_panning = False
-        self.active_handle = ""
-        self.pan_x = 0
-        self.pan_y = 0
-        self.current_points = []
-        self.snapshot_shapes = []
-        self.past = []
-        self.future = []
+    async def _here(self) -> tuple[UiState, str]:
+        """This tab's own state and the drawing it is on ("" when it is on none)."""
+        ui = await self.get_state(UiState)
+        room = self.doc_id
+        if not room or self._linked_to != room:
+            return ui, ""
+        return ui, room
 
-    def _persist(self):
-        """Save the shapes to the document store if they changed since the last save."""
-        if not self.doc_id:
+    @rx.event
+    async def join_room(self):
+        """Shows this tab among the people on the drawing, to everyone on it."""
+        ui, room = await self._here()
+        if not room:
             return
-        shapes = copy.deepcopy(self.shapes)
-        shapes_json = json.dumps(shapes)
-        if shapes_json == self._saved_shapes_json:
-            return
-        self._doc_version = DOCUMENTS_STORE.save(self.doc_id, shapes=shapes)["version"]
-        self._saved_shapes_json = shapes_json
+        me = ui.me
+        left, color = presence.join(room, ui.router.session.client_token, me["peer"], me["user"], me["name"], me.get("avatar", ""))
+        ui._set_color(color)
+        presence.prune(room)
+        publish(self, room)
+        if left:
+            push_later(left)
 
-    def _rename(self, title: str):
+    @rx.event
+    async def ping(self):
+        """Still here (every 5 s): keeps this tab among the people on the drawing and drops the
+        tabs gone."""
+        ui, room = await self._here()
+        if not room:
+            return
+        token = ui.router.session.client_token
+        if not presence.touch(room, token):
+            # Back after a restart, or after being dropped as idle.
+            await ui._identify()
+            me = ui.me
+            _, color = presence.join(room, token, me["peer"], me["user"], me["name"], me.get("avatar", ""))
+            ui._set_color(color)
+        presence.prune(room)
+        publish(self, room)
+
+    async def _rename(self, title: str):
         title = " ".join((title or "").split())[:100] or DEFAULT_TITLE
         if not self.doc_id or title == self.doc_title:
-            return
+            return None
+        try:
+            await asyncio.to_thread(DOCUMENTS_STORE.save, self.doc_id, title=title)
+        except DocumentGone:
+            # This event is in the room already, and holds it: no document_gone() from here.
+            saving.forget(self.doc_id)
+            await yjs_ws.close(self.doc_id)
+            self.gone = True
+            return None
         self.doc_title = title
-        self._doc_version = DOCUMENTS_STORE.save(self.doc_id, title=title)["version"]
+        return _page_title(title)
 
     @rx.event
-    def rename_document(self, title: str):
+    async def rename_document(self, title: str):
         """Rename the document (title input lost focus)."""
-        self._rename(title)
+        return await self._rename(title)
 
     @rx.event
-    def rename_from_form(self, form_data: dict):
+    async def rename_from_form(self, form_data: dict):
         """Rename the document (Enter pressed in the title input)."""
-        self._rename(form_data.get("title", ""))
+        return await self._rename(form_data.get("title", ""))
 
     @rx.event
-    def duplicate_document(self):
+    async def duplicate_document(self):
         """Copy this drawing into a new document and open it."""
         if not self.doc_id:
-            return
+            return None
+        room = await yjs_ws.room(self.doc_id)
+        if room is None:
+            return None
+        ui = await self.get_state(UiState)
         new_id = new_doc_id()
-        DOCUMENTS_STORE.save(
-            new_id, shapes=copy.deepcopy(self.shapes), title=f"{self.doc_title} (copy)"[:100]
+        shapes = room.shape_list()
+        await asyncio.to_thread(
+            DOCUMENTS_STORE.create,
+            new_id,
+            shapes=shapes,
+            title=f"{self.doc_title} (copy)"[:100],
+            creator=await ui._creator(),
         )
+        images = [s.get("src") for s in shapes if s.get("type") == "image"]
+        if images:
+            await asyncio.to_thread(DOCUMENTS_STORE.copy_images, self.doc_id, new_id, images)
         return rx.redirect(f"/doc/{new_id}")
 
-    @rx.var
-    def selected_shape(self) -> Shape:
-        """Return the currently selected shape or a default empty shape."""
-        for shape in self.shapes:
-            if shape["id"] == self.selected_shape_id:
-                return shape
-        return {
-            "id": "",
-            "type": "",
-            "x": 0,
-            "y": 0,
-            "width": 0,
-            "height": 0,
-            "fill": "",
-            "stroke": "",
-            "stroke_width": 0,
-            "end_x": 0,
-            "end_y": 0,
-            "content": "",
-            "points": [],
-            "path_data": "",
-            "src": "",
-        }
 
-    @rx.var
-    def current_path_string(self) -> str:
-        """Generate SVG path data for the current pencil drawing."""
-        if not self.current_points:
-            return ""
-        
-        # Start with Move to first point
-        d = f"M {self.current_points[0]['x']} {self.current_points[0]['y']}"
-        
-        # Line to subsequent points
-        for p in self.current_points[1:]:
-            d += f" L {p['x']} {p['y']}"
-            
-        return d
+def _page_title(title: str):
+    return rx.call_script(f"document.title = {json.dumps(title + ' | Codoc in Vecdraw')}")
 
-    def _get_handle_under_point(self, x: int, y: int, shape: Shape) -> str:
-        """Check if a point is over a resize handle."""
-        if not shape:
-            return ""
-            
-        # Handle size is roughly 8x8 (radius 4 or rect 8x8 centered)
-        # Let's use a hit radius of 6 for easier clicking
-        hit_r = 6
-        
-        if shape["type"] == "line":
-            # Start point
-            if abs(x - shape["x"]) <= hit_r and abs(y - shape["y"]) <= hit_r:
-                return "start"
-            # End point
-            if abs(x - shape["end_x"]) <= hit_r and abs(y - shape["end_y"]) <= hit_r:
-                return "end"
-        else:
-            # Rectangle / Ellipse handles
-            # NW
-            if abs(x - shape["x"]) <= hit_r and abs(y - shape["y"]) <= hit_r:
-                return "nw"
-            # NE
-            if abs(x - (shape["x"] + shape["width"])) <= hit_r and abs(y - shape["y"]) <= hit_r:
-                return "ne"
-            # SE
-            if abs(x - (shape["x"] + shape["width"])) <= hit_r and abs(y - (shape["y"] + shape["height"])) <= hit_r:
-                return "se"
-            # SW
-            if abs(x - shape["x"]) <= hit_r and abs(y - (shape["y"] + shape["height"])) <= hit_r:
-                return "sw"
-                
-        return ""
 
-    def _save_to_history(self):
-        """Save current state to history stack."""
-        self.past.append(copy.deepcopy(self.shapes))
-        self.future.clear()
+def publish(editor: EditorState, room: str) -> None:
+    """Shows who is on the drawing, and its call, to everyone on it (only what changed)."""
+    peers = presence.tabs(room)
+    if list(editor.peers) != peers:
+        editor.peers = peers
+    call.sync_room(editor, room)
 
-    @rx.event
-    def set_tool(self, tool: str):
-        """Set the active drawing tool."""
-        self.current_tool = tool
-        self.selected_shape_id = ""
 
-    @rx.event
-    def handle_mouse_down(self, point: dict[str, int]):
-        """Handle mouse down on canvas."""
-        # Debug logging
-        print(f"Mouse Down: {point}")
-        
-        # Ensure point is a dictionary and has x, y
-        if not isinstance(point, dict) or "x" not in point or "y" not in point:
-            print("Invalid point data")
-            return
-            
-        if point["x"] is None or point["y"] is None:
-            print("Point coordinates are None")
-            return
+def push_later(room: str) -> None:
+    """``publish``, from outside the tabs' own events."""
+    task = asyncio.create_task(push(room))
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
-        raw_x = point["x"]
-        raw_y = point["y"]
-        
-        if self.current_tool == "hand":
-            self.is_panning = True
-            self.start_x = raw_x
-            self.start_y = raw_y
-            return
 
-        # Adjust for panning
-        x = raw_x - self.pan_x
-        y = raw_y - self.pan_y
-        
-        print(f"Click at: {x}, {y} (Raw: {point['x']}, {point['y']})")
-        print(f"Selected Shape ID: {self.selected_shape_id}")
-        
-        self.start_x = x
-        self.start_y = y
-        self.current_x = x
-        self.current_y = y
-        
-        # Check if we clicked a handle of the selected shape
-        if self.selected_shape_id:
-            selected_shape = next((s for s in self.shapes if s["id"] == self.selected_shape_id), None)
-            if selected_shape:
-                print(f"Checking handles for shape: {selected_shape}")
-                handle = self._get_handle_under_point(x, y, selected_shape)
-                print(f"Handle found: {handle}")
-                
-                if handle:
-                    self.active_handle = handle
-                    self.is_dragging = True
-                    self.snapshot_shapes = copy.deepcopy(self.shapes)
-                    self.drag_offset_x = x
-                    self.drag_offset_y = y
-                    return
+async def push(room: str) -> None:
+    try:
+        async with rooms.change(EditorState, room) as editor:
+            publish(editor, room)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Cannot show the people of drawing %s: %s", room, e)
 
-        if self.current_tool == "select":
-            found_shape_id = ""
-            for shape in reversed(self.shapes):
-                if shape["type"] in ["rectangle", "image", "text", "triangle", "pencil"]:
-                    if (
-                        shape["x"] <= x <= shape["x"] + shape["width"]
-                        and shape["y"] <= y <= shape["y"] + shape["height"]
-                    ):
-                        found_shape_id = shape["id"]
-                        break
-                elif shape["type"] == "ellipse":
-                    cx = shape["x"] + shape["width"] / 2
-                    cy = shape["y"] + shape["height"] / 2
-                    rx_val = shape["width"] / 2
-                    ry_val = shape["height"] / 2
-                    if (x - cx) ** 2 / rx_val**2 + (y - cy) ** 2 / ry_val**2 <= 1:
-                        found_shape_id = shape["id"]
-                        break
-                elif shape["type"] == "line":
-                    lx = min(shape["x"], shape["end_x"])
-                    rx_ = max(shape["x"], shape["end_x"])
-                    ty = min(shape["y"], shape["end_y"])
-                    by = max(shape["y"], shape["end_y"])
-                    if lx - 5 <= x <= rx_ + 5 and ty - 5 <= y <= by + 5:
-                        found_shape_id = shape["id"]
-                        break
-            if found_shape_id:
-                self.selected_shape_id = found_shape_id
-                self.is_dragging = True
-                self.drag_offset_x = x
-                self.drag_offset_y = y
-                self.snapshot_shapes = copy.deepcopy(self.shapes)
-            else:
-                self.selected_shape_id = ""
-        elif self.current_tool == "text":
-            self._save_to_history()
-            new_shape: Shape = {
-                "id": str(uuid.uuid4()),
-                "type": "text",
-                "x": x,
-                "y": y,
-                "width": 100,
-                "height": 30,
-                "fill": "#000000",
-                "stroke": "none",
-                "stroke_width": 0,
-                "end_x": 0,
-                "end_y": 0,
-                "content": "Double click to edit",
-                "points": [],
-                "path_data": "",
-                "src": "",
-            }
-            self.shapes.append(new_shape)
-            self.selected_shape_id = new_shape["id"]
-            self.set_tool("select")
-            self._persist()
-        elif self.current_tool == "pencil":
-            self.is_drawing = True
-            self.selected_shape_id = ""
-            self.snapshot_shapes = copy.deepcopy(self.shapes)
-            self.current_points = [{"x": x, "y": y}]
-        else:
-            self.is_drawing = True
-            self.selected_shape_id = ""
-            self.snapshot_shapes = copy.deepcopy(self.shapes)
 
-    @rx.event
-    def handle_mouse_move(self, data: dict[str, int]):
-        """Handle mouse move on canvas (for dragging)."""
-        # Ensure data is valid
-        if not data or not isinstance(data, dict) or "x" not in data or "y" not in data:
-            return
-            
-        if data["x"] is None or data["y"] is None:
-            return
-
-        raw_x = data["x"]
-        raw_y = data["y"]
-        
-        if self.is_panning:
-            dx = raw_x - self.start_x
-            dy = raw_y - self.start_y
-            self.pan_x += dx
-            self.pan_y += dy
-            self.start_x = raw_x
-            self.start_y = raw_y
-            return
-
-        x = raw_x - self.pan_x
-        y = raw_y - self.pan_y
-        self.current_x = x
-        self.current_y = y
-        
-        if self.is_drawing and self.current_tool == "pencil":
-            self.current_points.append({"x": x, "y": y})
-            return
-
-        # Debug log for dragging state
-        if self.is_dragging:
-            # print(f"Dragging active: handle={self.active_handle}, shape={self.selected_shape_id}")
-            pass
-        
-        if self.is_dragging and self.selected_shape_id:
-            # Log only when actually dragging/resizing
-            if self.active_handle:
-                print(f"Resizing: Handle={self.active_handle}, Pos=({x}, {y})")
-            else:
-                print(f"Dragging: Pos=({x}, {y})")
-
-            dx = x - self.drag_offset_x
-            dy = y - self.drag_offset_y
-            self.drag_offset_x = x
-            self.drag_offset_y = y
-            
-            new_shapes = []
-            for shape in self.shapes:
-                if shape["id"] == self.selected_shape_id:
-                    s = shape.copy()
-                    
-                    if self.active_handle:
-                        # Handle resizing
-                        if s["type"] == "line":
-                            if self.active_handle == "start":
-                                s["x"] += dx
-                                s["y"] += dy
-                            elif self.active_handle == "end":
-                                s["end_x"] += dx
-                                s["end_y"] += dy
-                        else:
-                            # Rectangle / Ellipse / Triangle / Image / Text resizing
-                            if "n" in self.active_handle:
-                                s["y"] += dy
-                                s["height"] -= dy
-                            if "s" in self.active_handle:
-                                s["height"] += dy
-                            if "w" in self.active_handle:
-                                s["x"] += dx
-                                s["width"] -= dx
-                            if "e" in self.active_handle:
-                                s["width"] += dx
-                                
-                            # Handle negative dimensions (flipping)
-                            if s["width"] < 0:
-                                s["width"] = abs(s["width"])
-                                s["x"] -= s["width"]
-                                # Flip handle horizontally
-                                self.active_handle = self.active_handle.translate(str.maketrans("we", "ew"))
-                                
-                            if s["height"] < 0:
-                                s["height"] = abs(s["height"])
-                                s["y"] -= s["height"]
-                                # Flip handle vertically
-                                self.active_handle = self.active_handle.translate(str.maketrans("ns", "sn"))
-                    else:
-                        # Handle moving
-                        s["x"] += dx
-                        s["y"] += dy
-                        if s["type"] == "line":
-                            s["end_x"] += dx
-                            s["end_y"] += dy
-                        elif s["type"] == "pencil":
-                            # Move all points
-                            for p in s["points"]:
-                                p["x"] += dx
-                                p["y"] += dy
-                            # Recompute path_data
-                            d = f"M {s['points'][0]['x']} {s['points'][0]['y']}"
-                            for p in s['points'][1:]:
-                                d += f" L {p['x']} {p['y']}"
-                            s["path_data"] = d
-                            
-                    new_shapes.append(s)
-                else:
-                    new_shapes.append(shape)
-            self.shapes = new_shapes
-
-    @rx.event
-    def handle_mouse_up(self, point: dict[str, int] | None = None):
-        """Handle mouse up on canvas."""
-        print("Mouse Up")
-        if point and isinstance(point, dict) and "x" in point and "y" in point:
-            if point["x"] is not None and point["y"] is not None:
-                # Adjust for panning if not panning tool (though mouse up usually just ends things)
-                # But we need current_x/y to be correct for shape creation
-                raw_x = point["x"]
-                raw_y = point["y"]
-                if not self.is_panning:
-                    self.current_x = raw_x - self.pan_x
-                    self.current_y = raw_y - self.pan_y
-            
-        if self.is_panning:
-            self.is_panning = False
-            return
-
-        # Reset active handle and dragging state
-        self.active_handle = ""
-        self.is_dragging = False
-        
-        if self.is_drawing and self.current_tool != "select":
-            # Ensure coordinates are valid integers
-            start_x = self.start_x if self.start_x is not None else 0
-            start_y = self.start_y if self.start_y is not None else 0
-            current_x = self.current_x if self.current_x is not None else 0
-            current_y = self.current_y if self.current_y is not None else 0
-            
-            x = min(start_x, current_x)
-            y = min(start_y, current_y)
-            width = abs(current_x - start_x)
-            height = abs(current_y - start_y)
-            
-            if self.current_tool == "pencil":
-                if len(self.current_points) > 1:
-                    self.past.append(self.snapshot_shapes)
-                    self.future.clear()
-                    # Calculate bounding box for pencil
-                    xs = [p["x"] for p in self.current_points]
-                    ys = [p["y"] for p in self.current_points]
-                    min_x, max_x = min(xs), max(xs)
-                    min_y, max_y = min(ys), max(ys)
-                    
-                    # Compute path data
-                    d = f"M {self.current_points[0]['x']} {self.current_points[0]['y']}"
-                    for p in self.current_points[1:]:
-                        d += f" L {p['x']} {p['y']}"
-                    
-                    new_shape: Shape = {
-                        "id": str(uuid.uuid4()),
-                        "type": "pencil",
-                        "x": min_x,
-                        "y": min_y,
-                        "width": max_x - min_x,
-                        "height": max_y - min_y,
-                        "fill": "none",
-                        "stroke": "#7c3aed",
-                        "stroke_width": 2,
-                        "end_x": 0,
-                        "end_y": 0,
-                        "content": "",
-                        "points": self.current_points,
-                        "path_data": d,
-                        "src": "",
-                    }
-                    self.shapes.append(new_shape)
-                    self.selected_shape_id = new_shape["id"]
-            elif width > 2 or height > 2 or self.current_tool == "line":
-                self.past.append(self.snapshot_shapes)
-                self.future.clear()
-                new_shape: Shape = {
-                    "id": str(uuid.uuid4()),
-                    "type": self.current_tool,
-                    "x": x,
-                    "y": y,
-                    "width": width,
-                    "height": height,
-                    "fill": "transparent" if self.current_tool == "line" else "#e9d5ff",
-                    "stroke": "#7c3aed",
-                    "stroke_width": 2,
-                    "end_x": 0,
-                    "end_y": 0,
-                    "content": "",
-                    "points": [],
-                    "path_data": "",
-                    "src": "",
-                }
-                if self.current_tool == "line":
-                    new_shape["x"] = self.start_x
-                    new_shape["y"] = self.start_y
-                    new_shape["end_x"] = self.current_x
-                    new_shape["end_y"] = self.current_y
-                self.shapes.append(new_shape)
-                self.selected_shape_id = new_shape["id"]
-        elif self.is_dragging:
-            if self.shapes != self.snapshot_shapes:
-                self.past.append(self.snapshot_shapes)
-                self.future.clear()
-        self.is_drawing = False
-        self.is_dragging = False
-        self.snapshot_shapes = []
-        self.current_points = []
-        self._persist()
-
-    @rx.event
-    def select_shape(self, shape_id: str):
-        """Select a specific shape."""
-        if self.current_tool == "select":
-            self.selected_shape_id = shape_id
-
-    @rx.event
-    def update_property(self, key: str, value: Any):
-        """Update a property of the selected shape."""
-        if not self.selected_shape_id:
-            return
-        self._save_to_history()
-        new_shapes = []
-        for shape in self.shapes:
-            if shape["id"] == self.selected_shape_id:
-                s = shape.copy()
-                s[key] = value
-                new_shapes.append(s)
-            else:
-                new_shapes.append(shape)
-        self.shapes = new_shapes
-        self._persist()
-
-    @rx.event
-    def delete_selected(self):
-        """Delete the currently selected shape."""
-        if not self.selected_shape_id:
-            return
-        self._save_to_history()
-        self.shapes = [s for s in self.shapes if s["id"] != self.selected_shape_id]
-        self.selected_shape_id = ""
-        self._persist()
-
-    @rx.event
-    def undo(self):
-        """Undo the last action."""
-        if self.past:
-            self.future.append(copy.deepcopy(self.shapes))
-            self.shapes = self.past.pop()
-            self.selected_shape_id = ""
-            self._persist()
-
-    @rx.event
-    def redo(self):
-        """Redo the last undone action."""
-        if self.future:
-            self.past.append(copy.deepcopy(self.shapes))
-            self.shapes = self.future.pop()
-            self.selected_shape_id = ""
-            self._persist()
-
-    @rx.event
-    async def handle_upload(self, files: list[rx.UploadFile]):
-        """Handle image upload."""
-        for file in files:
-            upload_data = await file.read()
-            # Generate a safe filename using UUID to avoid encoding issues
-            ext = file.filename.split(".")[-1] if "." in file.filename else "png"
-            safe_filename = f"{uuid.uuid4()}.{ext}"
-            
-            outfile = rx.get_upload_dir() / safe_filename
-            with open(outfile, "wb") as f:
-                f.write(upload_data)
-            
-            # Add image shape
-            self._save_to_history()
-            print(f"DEBUG: Adding image shape for {safe_filename}")
-            new_shape: Shape = {
-                "id": str(uuid.uuid4()),
-                "type": "image",
-                "x": 100 - self.pan_x,
-                "y": 100 - self.pan_y,
-                "width": 200,
-                "height": 200,
-                "fill": "none",
-                "stroke": "none",
-                "stroke_width": 0,
-                "end_x": 0,
-                "end_y": 0,
-                "content": "",
-                "points": [],
-                "path_data": "",
-                "src": safe_filename,
-            }
-            # Explicitly reassign shapes to ensure state update triggers
-            self.shapes = self.shapes + [new_shape]
-            self.selected_shape_id = new_shape["id"]
-        self._persist()
-
-    # --- AI Operations Interface ---
-    
-    ai_ops_json: str = ""
-    is_ai_modal_open: bool = False
-    is_ai_docs_open: bool = False
-
-    @rx.event
-    def toggle_ai_modal(self):
-        self.is_ai_modal_open = not self.is_ai_modal_open
-
-    @rx.event
-    def toggle_ai_docs(self):
-        self.is_ai_docs_open = not self.is_ai_docs_open
-
-    @rx.event
-    def set_ai_ops_json(self, value: str):
-        self.ai_ops_json = value
-
-    @rx.event
-    def run_ai_ops(self):
-        """Parse and execute AI operations from JSON."""
-        import json
-        try:
-            ops = json.loads(self.ai_ops_json)
-            if not isinstance(ops, list):
-                ops = [ops]
-            
-            self._save_to_history()
-            
-            for op in ops:
-                op_type = op.get("op")
-                
-                if op_type == "clear":
-                    self.shapes = []
-                    continue
-                
-                # Common properties
-                shape_id = op.get("id", str(uuid.uuid4()))
-                x = op.get("x", 0)
-                y = op.get("y", 0)
-                fill = op.get("fill", "#000000")
-                stroke = op.get("stroke", "none")
-                stroke_width = op.get("stroke_width", 1)
-                
-                new_shape: Shape = {
-                    "id": shape_id,
-                    "type": "rectangle", # default
-                    "x": x,
-                    "y": y,
-                    "width": 100,
-                    "height": 100,
-                    "fill": fill,
-                    "stroke": stroke,
-                    "stroke_width": stroke_width,
-                    "end_x": 0,
-                    "end_y": 0,
-                    "content": "",
-                    "points": [],
-                    "path_data": "",
-                    "src": "",
-                }
-
-                if op_type == "addRect" or op_type == "add_rectangle":
-                    new_shape["type"] = "rectangle"
-                    new_shape["width"] = op.get("width", 100)
-                    new_shape["height"] = op.get("height", 100)
-                
-                elif op_type == "addEllipse" or op_type == "add_ellipse":
-                    new_shape["type"] = "ellipse"
-                    # Support rx/ry or width/height
-                    if "rx" in op:
-                        new_shape["width"] = op["rx"] * 2
-                    else:
-                        new_shape["width"] = op.get("width", 100)
-                        
-                    if "ry" in op:
-                        new_shape["height"] = op["ry"] * 2
-                    else:
-                        new_shape["height"] = op.get("height", 100)
-                        
-                    # If cx/cy provided, adjust x/y to top-left
-                    if "cx" in op:
-                        new_shape["x"] = op["cx"] - new_shape["width"] / 2
-                    if "cy" in op:
-                        new_shape["y"] = op["cy"] - new_shape["height"] / 2
-
-                elif op_type == "addText" or op_type == "add_text":
-                    new_shape["type"] = "text"
-                    new_shape["content"] = op.get("content", "Text")
-                    new_shape["height"] = op.get("font_size", 20) # Map font_size to height for text
-                    
-                elif op_type == "addLine" or op_type == "add_line":
-                    new_shape["type"] = "line"
-                    new_shape["end_x"] = op.get("end_x", x + 100)
-                    new_shape["end_y"] = op.get("end_y", y + 100)
-                
-                self.shapes.append(new_shape)
-            self._persist()
-
-            # Close modal on success
-            self.is_ai_modal_open = False
-            rx.toast("AI Operations executed successfully")
-            
-        except Exception as e:
-            print(f"Error executing AI ops: {e}")
-            rx.toast(f"Error: {str(e)}")
-
-    @rx.var
-    def json_data_base64(self) -> str:
-        """Get the Base64 encoded JSON representation of the current shapes."""
-        json_str = json.dumps(self.shapes)
-        return base64.b64encode(json_str.encode("utf-8")).decode("utf-8")
-
-    @rx.event
-    def check_pending_ai_ops(self):
-        """Poll for pending AI operations from external sources (MCP)."""
-        # Operations are queued per document id.
-        target_doc = self.doc_id
-
-        if target_doc and PENDING_AI_OPS.get(target_doc):
-            ops = PENDING_AI_OPS[target_doc]
-            # Clear the pending list immediately to avoid double processing
-            # Note: In a multi-threaded env this might need locking, but for Reflex/FastAPI simple usage this is usually fine
-            # We copy and clear
-            ops_to_run = list(ops)
-            PENDING_AI_OPS[target_doc].clear()
-            
-            # Reuse the logic from run_ai_ops but without the JSON parsing part
-            # We can just set the JSON string and call run_ai_ops, or refactor.
-            # Let's refactor slightly or just construct the JSON string to reuse existing logic for simplicity
-            import json
-            self.ai_ops_json = json.dumps(ops_to_run)
-            return self.run_ai_ops()
+async def document_gone(doc_id: str) -> None:
+    """The drawing was deleted while people had it open: they see so, and it isn't saved again."""
+    saving.forget(doc_id)
+    await yjs_ws.close(doc_id)
+    try:
+        async with rooms.change(EditorState, doc_id) as editor:
+            editor.gone = True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Cannot tell drawing %s it was deleted: %s", doc_id, e)

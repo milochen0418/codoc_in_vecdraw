@@ -22,8 +22,8 @@ For a deeper dive into the system design and architecture, see the design docume
 ## Features
 
 - **Vector Drawing**: Create and manipulate shapes on an infinite canvas.
-- **Document Manager**: The home page lists every saved drawing (with a preview), with search, filters and delete. Each drawing lives at `/doc/<doc_id>` and is saved automatically.
-- **Real-time Collaboration**: Everyone who opens the same `/doc/<doc_id>` link edits that drawing together.
+- **Document Manager**: The home page lists every saved drawing (with a preview, who made it and who is on it now), with search, filters and delete. Each drawing lives at `/doc/<doc_id>` and is saved automatically.
+- **Real-time Collaboration**: Everyone who opens the same `/doc/<doc_id>` link edits that drawing together: see each other's pointers, selections and shapes in progress, see who is here, and call everyone.
 - **AI Operations**: Control the canvas using JSON commands or via MCP (Model Context Protocol).
 - **Interactive UI**: Toolbar for selecting tools and a properties panel for adjusting shape attributes.
 
@@ -67,6 +67,33 @@ The application will be available at [http://localhost:3000](http://localhost:30
 - **To co-edit**, click **Copy Link** in the editor and open the link in another browser: both see each other's changes in real time.
 - Older share links of the form `/?room=<id>` open the drawing `/doc/<id>`.
 
+### What is shared, and what is yours
+
+| | What | Who sees it |
+|---|---|---|
+| **The drawing** | the shapes, their order and properties, the title | everyone, and it is saved |
+| **What you are doing** | your pointer with your name, what you selected, the shape you are dragging or drawing | the others, as a hint in your colour; nothing of it is saved |
+| **What is yours** | your tool, the part of the canvas in view, your selection handles, your panels and dialogs, your Undo | only you |
+
+So nobody's tool or view moves because of someone else, and **Undo** takes back your own changes, never theirs. A shape you drag or draw changes the drawing when you let go; until then the others watch it move, and **Esc** puts it back. Moving your view is private, so people out of view show as a chip at the edge of the canvas; click a chip, or someone's face at the top, to go to where they are.
+
+**Call everyone** rings everyone on the drawing, through a call app installed from the App Store (the DDNS Intent `call.join`); without one the button does nothing.
+
+### How it works
+
+Reflex draws the page around the canvas (title, people, calls, the document manager). The tools, canvas and properties are a React component (`assets/vecdraw/`) that works in the browser, so your own drawing never waits for the network.
+
+- The drawing is a Yjs document (`assets/vecdraw/doc.js`), kept by the server too (`codoc_in_vecdraw/yjs_ws.py`): changes merge, also those made while disconnected, and they keep working across a server restart because the document is stored with its edit history.
+- What you are doing travels in the document's awareness, which nobody saves.
+- `EditorState` (a Reflex `SharedState`) holds what the page shows to all: the title, the people, the call.
+
+### Where drawings are saved
+
+A drawing reaches the store about 1.5 seconds after a change (`codoc_in_vecdraw/saving.py`).
+
+- **Run locally**, drawings are rows of the SQLite database `reflex.db`, and images are files in `uploaded_files/`.
+- **Installed from the re_ddns App Store**, the catalog gives the app the shared collection `drawings`, and each drawing is an item of it (kind `drawing.vector`) that the App Store's **Storage** page lists: `drawing.json` (the shapes), `drawing.svg` (the same picture), `drawing.yjs` (the document with its edit history), `images/` (images placed in it), and a PNG as its preview. The title and the creator are in the item's manifest.
+
 ## Testing
 
 This project uses [Playwright](https://playwright.dev/python/) for end-to-end testing.
@@ -98,7 +125,7 @@ This project includes an MCP (Model Context Protocol) server that allows AI assi
 The MCP server exposes tools to:
 - Draw rectangles, circles, lines, and text.
 - Clear the canvas.
-- Target a drawing via `doc_id` (the id in `/doc/<doc_id>`, default `default`). The drawing must be open in a browser for the operations to be applied.
+- Target a drawing via `doc_id` (the id in `/doc/<doc_id>`, default `default`). The operations reach everyone on the drawing at once, and work with no browser open too.
 
 ### Running Tests
 
@@ -117,7 +144,9 @@ bash run_test_suite.sh debug_image/run_test.py
 bash run_test_suite.sh doc_manager/run_test.py
 ```
 
-The tests run headless; set `HEADLESS=0` to watch the browser, and `BASE_URL` to test a server on another address. Each test works on its own document and deletes it when it finishes.
+Besides the document manager and the debug suites, `together/run_test.py` is two people on one drawing: what is shared, what is each person's own, and what each sees of the other. `poetry run pytest` runs the unit tests in `tests/`.
+
+The tests run headless; set `HEADLESS=0` to watch the browser, and `BASE_URL` to test a server on another address (`BACKEND_URL` as well for `together`). Each test works on its own document and deletes it when it finishes.
 
 ### Adding New Test Cases
 

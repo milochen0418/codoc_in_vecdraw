@@ -2,6 +2,7 @@
 
 import reflex as rx
 
+from codoc_in_vecdraw.components.together import face, identity
 from codoc_in_vecdraw.states.doc_list_state import SEARCH_INPUT_ID, DocListState
 
 _TH = "px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider"
@@ -83,8 +84,20 @@ def doc_row(doc: dict) -> rx.Component:
             rx.el.p(
                 doc["shape_count"],
                 rx.cond(doc["shape_count"] == 1, " shape", " shapes"),
+                rx.cond(doc["by"] != "", rx.el.span(" · by " + doc["by"])),
                 rx.el.span(" · " + doc["doc_id"], class_name="font-mono md:hidden"),
                 class_name="mt-0.5 text-[11px] text-gray-400",
+            ),
+            rx.cond(
+                doc["people"].length() > 0,
+                rx.el.div(
+                    rx.el.div(
+                        rx.foreach(doc["people"], lambda p: face(p["name"], p["initials"], p["avatar"], p["color"], size="h-6 w-6")),
+                        class_name="flex items-center -space-x-1.5",
+                    ),
+                    rx.el.span(doc["people"].length(), " here", class_name="text-xs font-medium text-emerald-700"),
+                    class_name="mt-1.5 inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200",
+                ),
             ),
             class_name="px-6 py-4 align-top",
         ),
@@ -285,6 +298,16 @@ def empty_state() -> rx.Component:
     )
 
 
+_REFRESH_JS = """
+if (window.__vecdrawHome) clearInterval(window.__vecdrawHome);
+window.__vecdrawHome = setInterval(function () {
+    var el = document.getElementById('doc-list-refresh');
+    if (!el) { clearInterval(window.__vecdrawHome); window.__vecdrawHome = null; return; }
+    if (!document.hidden) el.click();
+}, 8000);
+"""
+
+
 def doc_list_page() -> rx.Component:
     """The full document management page."""
     return rx.el.main(
@@ -296,11 +319,15 @@ def doc_list_page() -> rx.Component:
                         rx.el.h1("Document Manager", class_name="text-xl font-bold text-gray-900"),
                         class_name="flex items-center gap-3",
                     ),
-                    rx.el.button(
-                        rx.icon("plus", class_name="mr-2 h-4 w-4"),
-                        "New Document",
-                        on_click=DocListState.create_document,
-                        class_name="bg-violet-600 text-white px-4 py-2 rounded-lg hover:bg-violet-700 transition-colors flex items-center font-medium shadow-sm cursor-pointer active:scale-95",
+                    rx.el.div(
+                        rx.el.button(
+                            rx.icon("plus", class_name="mr-2 h-4 w-4"),
+                            "New Document",
+                            on_click=DocListState.create_document,
+                            class_name="bg-violet-600 text-white px-4 py-2 rounded-lg hover:bg-violet-700 transition-colors flex items-center font-medium shadow-sm cursor-pointer active:scale-95",
+                        ),
+                        identity(),
+                        class_name="flex items-center gap-4",
                     ),
                     class_name="flex items-center justify-between w-full",
                 ),
@@ -320,6 +347,15 @@ def doc_list_page() -> rx.Component:
                 class_name="flex-1 px-4 sm:px-6 lg:px-8 py-8 bg-gray-50 overflow-y-auto",
             ),
             class_name="flex flex-col h-screen w-full bg-white",
+        ),
+        # Who is on each drawing changes while the list is open.
+        rx.el.button(
+            id="doc-list-refresh",
+            on_click=DocListState.refresh_people,
+            on_mount=rx.call_script(_REFRESH_JS),
+            tab_index=-1,
+            aria_hidden="true",
+            class_name="sr-only",
         ),
         class_name="font-['Inter']",
     )

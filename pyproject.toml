@@ -9,10 +9,23 @@ packages = [{include = "codoc_in_vecdraw"}]
 [tool.poetry.dependencies]
 python = ">=3.11,<3.16"
 reflex = {version = "0.10.0", extras = ["db"]}
-reflex-mouse-track = "^0.0.1"
+# Sign-in (SSO), Call everyone (DDNS Intent call.join) and the shared `drawings` collection.
+reflex-ddns-auth = {path = "../reflex_ddns_auth", develop = true}
+PyJWT = ">=2.8"
+# The drawing everyone edits at once, held by the server too (Yjs, as in Cellora and Codoc in CAD).
+pycrdt = ">=0.14"
+# The preview of a drawing on the App Store's storage page.
+pillow = ">=11"
 mcp = "^1.25.0"
-fastapi = "^0.143.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+playwright = "^1.42.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

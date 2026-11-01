@@ -1,6 +1,10 @@
 import reflex as rx
+from codoc_in_vecdraw.components.together import call_button, identity, presence
 from codoc_in_vecdraw.states.doc_list_state import DocListState
 from codoc_in_vecdraw.states.editor_state import EditorState
+from codoc_in_vecdraw.states.ui_state import UiState
+
+_BUTTON = "flex items-center text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
 
 
 def title_editor() -> rx.Component:
@@ -15,10 +19,26 @@ def title_editor() -> rx.Component:
             on_blur=EditorState.rename_document,
             placeholder="Untitled drawing",
             title="Rename this drawing",
-            class_name="w-56 text-lg font-bold text-gray-800 bg-transparent border border-transparent rounded-md px-2 py-0.5 hover:border-gray-200 focus:border-violet-400 focus:ring-1 focus:ring-violet-400 outline-none",
+            class_name="w-32 lg:w-56 text-lg font-bold text-gray-800 bg-transparent border border-transparent rounded-md px-2 py-0.5 hover:border-gray-200 focus:border-violet-400 focus:ring-1 focus:ring-violet-400 outline-none",
         ),
         on_submit=EditorState.rename_from_form,
         reset_on_submit=False,
+    )
+
+
+def share_button() -> rx.Component:
+    return rx.el.button(
+        rx.icon("link", class_name="w-4 h-4 xl:mr-2"),
+        rx.el.span("Copy Link", class_name="hidden xl:inline"),
+        on_click=[
+            rx.call_script(
+                "navigator.clipboard.writeText(window.location.origin + window.location.pathname)"
+            ),
+            rx.toast("Link copied: everyone who opens it edits this drawing with you"),
+        ],
+        id="share-link",
+        title="Share this drawing for real-time co-editing",
+        class_name=f"{_BUTTON} bg-violet-100 text-violet-700 hover:bg-violet-200",
     )
 
 
@@ -29,63 +49,28 @@ def topbar() -> rx.Component:
             rx.el.div(
                 rx.el.a(
                     rx.icon("folder-open", class_name="w-4 h-4"),
-                    "My Documents",
+                    rx.el.span("My Documents", class_name="hidden xl:inline"),
                     href="/",
+                    title="My Documents",
                     class_name="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0",
                 ),
-                rx.el.div(class_name="w-px h-6 bg-gray-200 mx-3 flex-shrink-0"),
-                rx.icon("shapes", class_name="w-6 h-6 text-violet-600 mr-1 flex-shrink-0"),
+                rx.el.div(class_name="hidden lg:block w-px h-6 bg-gray-200 mx-3 flex-shrink-0"),
+                rx.icon("shapes", class_name="hidden lg:block w-6 h-6 text-violet-600 mr-1 flex-shrink-0"),
                 title_editor(),
-                rx.el.span(
-                    EditorState.doc_id,
-                    title="Document ID",
-                    class_name="text-xs font-mono text-gray-400",
-                ),
-                class_name="flex items-center min-w-0",
+                class_name="flex items-center min-w-0 flex-shrink-0",
             ),
             rx.el.div(
-                rx.el.div(
-                    rx.el.button(
-                        rx.icon("undo-2", class_name="w-4 h-4"),
-                        on_click=EditorState.undo,
-                        disabled=~EditorState.past,
-                        class_name="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors",
-                        title="Undo",
-                    ),
-                    rx.el.button(
-                        rx.icon("redo-2", class_name="w-4 h-4"),
-                        on_click=EditorState.redo,
-                        disabled=~EditorState.future,
-                        class_name="p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors",
-                        title="Redo",
-                    ),
-                    class_name="flex items-center gap-1 mr-6 border-r border-gray-200 pr-4",
-                ),
-                rx.el.span(
-                    f"Mode: ",
-                    rx.el.span(
-                        EditorState.current_tool, class_name="font-semibold capitalize"
-                    ),
-                    class_name="text-sm text-gray-500 mr-4",
-                ),
-                rx.el.button(
-                    rx.icon("link", class_name="w-4 h-4 mr-2"),
-                    "Copy Link",
-                    on_click=[
-                        rx.call_script(
-                            "navigator.clipboard.writeText(window.location.origin + window.location.pathname)"
-                        ),
-                        rx.toast("Link copied: everyone who opens it edits this drawing with you"),
-                    ],
-                    title="Share this drawing for real-time co-editing",
-                    class_name="flex items-center text-sm font-medium bg-violet-100 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-200 transition-colors mr-2",
-                ),
+                presence(),
+                call_button(),
+                share_button(),
+                rx.el.div(class_name="w-px h-6 bg-gray-200 flex-shrink-0"),
                 rx.menu.root(
                     rx.menu.trigger(
                         rx.el.button(
-                            rx.icon("file", class_name="w-4 h-4 mr-2"),
-                            "File",
-                            class_name="flex items-center text-sm font-medium bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors mr-2",
+                            rx.icon("file", class_name="w-4 h-4 xl:mr-2"),
+                            rx.el.span("File", class_name="hidden xl:inline"),
+                            title="File",
+                            class_name=f"{_BUTTON} bg-gray-100 text-gray-700 hover:bg-gray-200",
                         ),
                     ),
                     rx.menu.content(
@@ -94,35 +79,39 @@ def topbar() -> rx.Component:
                     ),
                 ),
                 rx.el.button(
-                    rx.icon("bot", class_name="w-4 h-4 mr-2"),
-                    "AI Ops",
-                    on_click=EditorState.toggle_ai_modal,
-                    class_name="flex items-center text-sm font-medium bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg hover:bg-emerald-200 transition-colors mr-2",
+                    rx.icon("bot", class_name="w-4 h-4 xl:mr-2"),
+                    rx.el.span("AI Ops", class_name="hidden xl:inline"),
+                    on_click=UiState.toggle_ai_modal,
+                    title="AI Ops",
+                    class_name=f"{_BUTTON} bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
                 ),
                 rx.menu.root(
                     rx.menu.trigger(
                         rx.el.button(
-                            rx.icon("download", class_name="w-4 h-4 mr-2"),
-                            "Export",
-                            class_name="flex items-center text-sm font-medium bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors",
+                            rx.icon("download", class_name="w-4 h-4 xl:mr-2"),
+                            rx.el.span("Export", class_name="hidden xl:inline"),
+                            title="Export",
+                            class_name=f"{_BUTTON} bg-gray-900 text-white hover:bg-gray-800",
                         ),
                     ),
                     rx.menu.content(
-                        rx.menu.item("Export as JSON", on_click=rx.call_script(f"window.exportJSON(atob('{EditorState.json_data_base64}'))")),
+                        rx.menu.item("Export as JSON", on_click=rx.call_script("window.exportJSON(window.vecdraw.exportShapes())")),
                         rx.menu.item("Export as SVG", on_click=rx.call_script("window.exportSVG()")),
                         rx.menu.item("Export as PNG", on_click=rx.call_script("window.exportPNG()")),
                     ),
                 ),
-                class_name="flex items-center",
+                rx.el.div(class_name="w-px h-6 bg-gray-200 flex-shrink-0"),
+                identity(),
+                class_name="flex items-center gap-2 min-w-0 overflow-x-auto",
             ),
-            class_name="flex items-center justify-between px-6 py-3 h-16",
+            class_name="flex items-center justify-between gap-4 px-3 lg:px-6 py-3 h-16",
         ),
         rx.dialog.root(
             rx.dialog.content(
                 rx.dialog.title("AI Operations"),
                 rx.dialog.description("Paste JSON operations here to control the canvas."),
                 rx.cond(
-                    EditorState.is_ai_docs_open,
+                    UiState.is_ai_docs_open,
                     rx.box(
                         rx.markdown("""
 ### Supported Operations
@@ -137,25 +126,25 @@ def topbar() -> rx.Component:
                     ),
                 ),
                 rx.text_area(
-                    value=EditorState.ai_ops_json,
-                    on_change=EditorState.set_ai_ops_json,
+                    value=UiState.ai_ops_json,
+                    on_change=UiState.set_ai_ops_json,
                     placeholder='[{"op": "addRect", "x": 10, "y": 10, "width": 100, "height": 100}]',
                     class_name="h-64 font-mono text-sm my-4",
                 ),
                 rx.flex(
-                    rx.button("Docs", color_scheme="blue", variant="soft", on_click=EditorState.toggle_ai_docs),
+                    rx.button("Docs", color_scheme="blue", variant="soft", on_click=UiState.toggle_ai_docs),
                     rx.spacer(),
                     rx.dialog.close(
                         rx.button("Cancel", color_scheme="gray", variant="soft")
                     ),
-                    rx.button("Run", on_click=EditorState.run_ai_ops),
+                    rx.button("Run", on_click=UiState.run_ai_ops),
                     spacing="3",
                     justify="end",
                     width="100%",
                 ),
             ),
-            open=EditorState.is_ai_modal_open,
-            on_open_change=EditorState.toggle_ai_modal,
+            open=UiState.is_ai_modal_open,
+            on_open_change=UiState.toggle_ai_modal,
         ),
         class_name="bg-white border-b border-gray-200 flex-shrink-0 z-10",
     )

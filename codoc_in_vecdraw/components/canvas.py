@@ -1,71 +1,27 @@
-import reflex as rx
-from codoc_in_vecdraw.states.editor_state import EditorState
-from codoc_in_vecdraw.components.shapes import render_shape, render_preview
-from reflex_mouse_track import mouse_track
+"""The editor itself: a local React component (``assets/vecdraw/editor.jsx``) wrapped for Reflex.
 
-GET_COORDS_SCRIPT = """
-(function() {
-    var elem = document.getElementById('main-canvas');
-    if (!elem) return {x: 0, y: 0};
-    var rect = elem.getBoundingClientRect();
-    var e = window.event;
-    if (!e) {
-        // Try to find event in arguments if window.event is missing (Firefox)
-        try { e = arguments[0]; } catch(err) {}
-    }
-    if (!e) return {x: 0, y: 0};
-    
-    return {
-        x: Math.round(e.clientX - rect.left),
-        y: Math.round(e.clientY - rect.top)
-    };
-})()
+The tools, the canvas and the properties work in the browser: each person's own pointer, tool and
+view shouldn't wait for the network or reach anyone else. The JSX files are plain assets (Reflex
+copies ``assets/`` into the frontend), imported by ``importable_path`` as Cellora's notebook is.
+The other modules sit next to it and are imported relatively, and the npm packages they import
+are installed through ``lib_dependencies``.
 """
 
-def canvas() -> rx.Component:
-    """The main drawing canvas area."""
-    return rx.box(
-        rx.box(
-            rx.el.div(
-                class_name="absolute inset-0 opacity-[0.03] pointer-events-none",
-                style={
-                    "backgroundImage": "radial-gradient(circle, #000 1px, transparent 1px)",
-                    "backgroundSize": "20px 20px",
-                    "backgroundPosition": f"{EditorState.pan_x}px {EditorState.pan_y}px",
-                },
-            ),
-            rx.el.svg(
-                rx.el.rect(
-                    width="100%", height="100%", fill="transparent", id="canvas-bg"
-                ),
-                rx.el.g(
-                    rx.foreach(EditorState.shapes, render_shape),
-                    rx.cond(EditorState.is_drawing, render_preview(), rx.fragment()),
-                    style={
-                        "pointerEvents": rx.cond(EditorState.is_drawing, "none", "auto"),
-                        "transform": f"translate({EditorState.pan_x}px, {EditorState.pan_y}px)",
-                    },
-                ),
-                width="100%",
-                height="100%",
-                class_name="absolute inset-0 w-full h-full touch-none block",
-                id="main-svg",
-            ),
-            class_name="w-full h-full",
-        ),
-        id="main-canvas",
-        class_name="relative flex-1 w-full h-full bg-gray-50 overflow-hidden touch-none",
-        style={
-            "cursor": rx.cond(
-                EditorState.current_tool == "hand",
-                rx.cond(EditorState.is_panning, "grabbing", "grab"),
-                rx.cond(
-                    EditorState.current_tool == "select", "default", "crosshair"
-                )
-            )
-        },
-        on_mouse_down=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_down),
-        on_mouse_move=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_move),
-        on_mouse_up=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_up),
-        on_mouse_leave=rx.call_script(GET_COORDS_SCRIPT, callback=EditorState.handle_mouse_up),
-    )
+import reflex as rx
+
+_JS = rx.asset("vecdraw/editor.jsx")
+for _name in ("doc.js", "geometry.js", "others.jsx", "panels.jsx"):
+    rx.asset(f"vecdraw/{_name}")
+
+
+class VecdrawEditor(rx.Component):
+    library = _JS.importable_path
+    tag = "VecdrawEditor"
+    lib_dependencies: list[str] = ["yjs@13.6.33", "y-websocket@3.1.0", "y-protocols@1.0.7", "lib0@0.2.119"]
+
+    doc_id: rx.Var[str]
+    # This tab: {"peer", "name", "color", ...}; how the others see its pointer and selection.
+    me: rx.Var[dict]
+
+
+editor_view = VecdrawEditor.create
