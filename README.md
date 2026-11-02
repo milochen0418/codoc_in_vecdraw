@@ -106,6 +106,10 @@ Install Playwright browsers:
 poetry run playwright install
 ```
 
+## AI Assistant
+
+On re_ddns with an AI Hub, **AI Assistant** in the top bar opens the hub's assistant on the drawing: tell it what to draw and it appears for everyone on the drawing. New shapes go in the part of the canvas in view, and "this" means the selected shape. The tools are in `codoc_in_vecdraw/ai_tools.py` (`vecdraw.*`). Adding shapes runs at once. Changing or removing them waits for your Accept in the chat, because Undo doesn't reach what the AI did.
+
 ## MCP Server Integration
 
 This project includes an MCP (Model Context Protocol) server that allows AI assistants (like Claude Desktop or ChatGPT Atlas) to control the canvas.

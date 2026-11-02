@@ -137,6 +137,20 @@ class Room:
                 z += 1
                 self.shapes[shape["id"]] = Map({**shape, "z": z})
 
+    def change(self, changes: dict[str, dict]) -> None:
+        """Sets fields of shapes: shape id -> its new fields."""
+        with self.doc.transaction():
+            for shape_id, fields in changes.items():
+                shape = self.shapes[shape_id]
+                for key, value in fields.items():
+                    shape[key] = value
+
+    def remove(self, ids: list[str]) -> None:
+        """Takes these shapes off the drawing."""
+        with self.doc.transaction():
+            for shape_id in set(ids):
+                del self.shapes[shape_id]
+
     def clear(self) -> None:
         """Takes every shape off the drawing."""
         self.shapes.clear()

@@ -527,6 +527,26 @@ function Workspace({ drawing, docId }) {
     };
   }, [drawing, follow]);
 
+  // The AI Hub's dialogs ask the page what it shows (reflex_ddns_auth.intent): new shapes go
+  // where the person is looking, and "this" means the selected shape.
+  useEffect(() => {
+    window.__ddnsContext = () => {
+      const { pan: p, size: s, selectedId: id } = now.current;
+      const left = Math.round(-p.x);
+      const top = Math.round(-p.y);
+      const shape = drawing.byId.get(id);
+      const words = [
+        `The drawing (room ${docId}) has ${drawing.list.length} shapes.`,
+        `The part of the canvas in view runs from x ${left} to ${left + Math.round(s.w)} and from y ${top} to ${top + Math.round(s.h)}.`,
+      ];
+      if (shape) words.push(`The selected shape is the ${shape.type} ${shape.id}.`);
+      return words.join(" ");
+    };
+    return () => {
+      delete window.__ddnsContext;
+    };
+  }, [drawing, docId]);
+
   // ---------------------------------------------------- the page
 
   const cursor = tool === "hand" ? (gesture ? "grabbing" : "grab") : tool === "select" ? "default" : "crosshair";

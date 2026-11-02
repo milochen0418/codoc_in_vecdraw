@@ -20,6 +20,8 @@ import time
 COLORS = ["#F97316", "#22C55E", "#A855F7", "#EF4444", "#EC4899", "#06B6D4", "#EAB308", "#3B82F6", "#14B8A6", "#F43F5E"]
 # A tab that hasn't pinged for this long has left (it pings every 5 s; hidden tabs are throttled).
 IDLE = 30.0
+# Starts the "user" of an AI on a drawing (ai_tools): it shows among the people, but a call doesn't ring it.
+AI_PREFIX = "ai:"
 
 
 @dataclasses.dataclass
@@ -120,7 +122,7 @@ def tabs(room: str) -> list[dict[str, str]]:
 def users_on(room: str) -> list[str]:
     """The people on the drawing."""
     with _lock:
-        return sorted({t.user for t in _rooms.get(room, {}).values() if t.user})
+        return sorted({t.user for t in _rooms.get(room, {}).values() if t.user and not t.user.startswith(AI_PREFIX)})
 
 
 def watching() -> dict[str, list[dict[str, str]]]:

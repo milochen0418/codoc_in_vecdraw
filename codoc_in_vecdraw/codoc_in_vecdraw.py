@@ -15,7 +15,7 @@ from reflex_ddns_auth.intent import install_intent_host
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 
-from codoc_in_vecdraw import ops, presence, saving, yjs_ws
+from codoc_in_vecdraw import ai_tools, ops, presence, saving, yjs_ws
 from codoc_in_vecdraw.call import CALLS_ENABLED
 from codoc_in_vecdraw.components.canvas import editor_view
 from codoc_in_vecdraw.components.doc_list import doc_list_page
@@ -180,6 +180,9 @@ app.register_lifespan_task(lifespan)
 yjs_ws.register_yjs_routes(app)
 yjs_ws.on_change = saving.changed
 saving.on_gone = document_gone
+
+# On re_ddns with an AI Hub: the hub's assistant may read drawings and draw on them.
+ai_tools.register(app)
 
 app._api.add_route(BYE_PATH, bye, methods=["POST"])
 app._api.add_route("/_vecdraw/upload/{doc_id}", upload_image, methods=["POST"])

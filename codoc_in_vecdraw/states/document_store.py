@@ -537,13 +537,17 @@ def _color(value) -> tuple | None:
 PREVIEW_SIZE = (480, 300)
 
 
-def render_png(shapes: list[dict], image_file: Callable[[str], Optional[Path]] | None = None) -> bytes:
-    """A small PNG of the drawing, for the storage page (it shows no SVG), drawn with Pillow so
-    that it needs no browser: drawings also change without one (the AI's operations)."""
+def render_png(
+    shapes: list[dict],
+    image_file: Callable[[str], Optional[Path]] | None = None,
+    picture_size: tuple[int, int] = PREVIEW_SIZE,
+) -> bytes:
+    """A small PNG of the drawing, for the storage page (it shows no SVG) and for the AI to see,
+    drawn with Pillow so that it needs no browser: drawings also change without one."""
     from PIL import Image, ImageDraw, ImageFont
 
     scale_up = 2  # drawn big and scaled down, for smooth edges
-    width, height = PREVIEW_SIZE[0] * scale_up, PREVIEW_SIZE[1] * scale_up
+    width, height = picture_size[0] * scale_up, picture_size[1] * scale_up
     picture = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(picture)
     boxes = _svg(shapes, None)[1]
@@ -598,5 +602,5 @@ def render_png(shapes: list[dict], image_file: Callable[[str], Optional[Path]] |
                 except (OSError, ValueError, AttributeError, TypeError):
                     draw.rectangle(box, fill="#e5e7eb", outline="#9ca3af", width=scale_up)
     output = io.BytesIO()
-    picture.resize(PREVIEW_SIZE, Image.Resampling.LANCZOS).save(output, "PNG", optimize=True)
+    picture.resize(picture_size, Image.Resampling.LANCZOS).save(output, "PNG", optimize=True)
     return output.getvalue()

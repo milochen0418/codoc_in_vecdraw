@@ -1,4 +1,7 @@
 import reflex as rx
+from reflex_ddns_auth.intent import Intent
+from reflex_ddns_auth.tools import own_app
+
 from codoc_in_vecdraw.components.together import call_button, identity, presence
 from codoc_in_vecdraw.states.doc_list_state import DocListState
 from codoc_in_vecdraw.states.editor_state import EditorState
@@ -42,6 +45,21 @@ def share_button() -> rx.Component:
     )
 
 
+def assistant_button() -> rx.Component:
+    """Opens the AI Hub's assistant on this drawing (the ``ai.assist`` intent), in a dialog that
+    stays open beside it. Only the platform has an AI Hub."""
+    if not own_app():
+        return rx.fragment()
+    return rx.el.button(
+        rx.icon("sparkles", class_name="w-4 h-4 xl:mr-2"),
+        rx.el.span("AI Assistant", class_name="hidden xl:inline"),
+        on_click=Intent.start(None, "ai.assist", keep_alive=True, single=True, label="AI assistant", in_app=own_app(), room=EditorState.doc_id),
+        id="ai-assist",
+        title="Tell the AI what to draw on this drawing",
+        class_name=f"{_BUTTON} bg-violet-600 text-white hover:bg-violet-700",
+    )
+
+
 def topbar() -> rx.Component:
     """The top navigation bar."""
     return rx.el.header(
@@ -78,6 +96,7 @@ def topbar() -> rx.Component:
                         rx.menu.item("Duplicate", on_click=EditorState.duplicate_document),
                     ),
                 ),
+                assistant_button(),
                 rx.el.button(
                     rx.icon("bot", class_name="w-4 h-4 xl:mr-2"),
                     rx.el.span("AI Ops", class_name="hidden xl:inline"),
