@@ -1,7 +1,7 @@
 import pytest
 from reflex_ddns_auth.collections import Collection
 
-from codoc_in_vecdraw import saving, yjs_ws
+from codoc_in_vecdraw import link_preview, saving, yjs_ws
 from codoc_in_vecdraw.states import document_store
 from codoc_in_vecdraw.states.document_store import _ItemDocumentStore
 
@@ -13,6 +13,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(document_store, "DOCUMENTS_STORE", items)
     monkeypatch.setattr(yjs_ws, "DOCUMENTS_STORE", items)
     monkeypatch.setattr(saving, "DOCUMENTS_STORE", items)
+    monkeypatch.setattr(link_preview, "DOCUMENTS_STORE", items)
     monkeypatch.setattr(yjs_ws, "_rooms", {})
     monkeypatch.setattr(saving, "gone", set())
     return items

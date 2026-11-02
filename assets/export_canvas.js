@@ -1,8 +1,9 @@
 // Export the drawing: all of it, whatever part of the canvas is in view, and only the shapes: not
 // selections, pointers or anyone's names.
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-const EXPORT_PAD = 16;
+// `var`: the page loads this file again each time a drawing opens.
+var SVG_NS = "http://www.w3.org/2000/svg";
+var EXPORT_PAD = 16;
 
 function drawingBox(layer) {
     const box = layer.getBBox();

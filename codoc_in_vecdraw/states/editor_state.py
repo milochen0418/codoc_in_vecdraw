@@ -17,7 +17,7 @@ import logging
 import reflex as rx
 from reflex_ddns_auth import rooms
 
-from codoc_in_vecdraw import call, presence, saving, yjs_ws
+from codoc_in_vecdraw import call, embed, presence, saving, yjs_ws
 from codoc_in_vecdraw.states.document_store import (
     DEFAULT_TITLE,
     DOCUMENTS_STORE,
@@ -227,6 +227,7 @@ async def document_gone(doc_id: str) -> None:
     """The drawing was deleted while people had it open: they see so, and it isn't saved again."""
     saving.forget(doc_id)
     await yjs_ws.close(doc_id)
+    embed.changed(doc_id)
     try:
         async with rooms.change(EditorState, doc_id) as editor:
             editor.gone = True

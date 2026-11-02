@@ -28,7 +28,7 @@ const TOOLS = [
   ["text", "Text", Type],
 ];
 
-const TOOL = "flex flex-col items-center justify-center p-2 md:p-3 rounded-xl transition-colors w-full";
+const TOOL = "flex flex-col items-center justify-center p-2 rounded-xl transition-colors w-full";
 const TOOL_OFF = "hover:bg-gray-100 text-gray-600";
 const TOOL_ON = "bg-violet-100 text-violet-700";
 const STEP = "flex-1 flex items-center justify-center p-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors";
@@ -37,10 +37,10 @@ const FIELD = "w-full text-sm border border-gray-200 rounded-md px-2 py-1.5 focu
 
 export function Toolbar({ tool, onTool, canUndo, canRedo, onUndo, onRedo, onFiles }) {
   return (
-    <aside className="w-14 md:w-24 bg-white border-r border-gray-200 h-full flex-shrink-0 z-10 flex flex-col overflow-y-auto">
-      <div className="p-1 md:p-4 flex-1">
-        <h2 className="hidden md:block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 px-2">Tools</h2>
-        <div className="flex flex-col gap-1 md:gap-2">
+    <aside className="w-14 md:w-24 bg-white border-r border-gray-200 h-full flex-shrink-0 z-10 flex flex-col">
+      <div className="p-1 md:p-2 flex-1 min-h-0 overflow-y-auto">
+        <h2 className="hidden md:block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-2">Tools</h2>
+        <div className="flex flex-col gap-1">
           {TOOLS.map(([name, label, Icon]) => (
             <button key={name} type="button" title={label} onClick={() => onTool(name)} className={`${TOOL} ${tool === name ? TOOL_ON : TOOL_OFF}`}>
               <Icon className="w-6 h-6 md:mb-1" />

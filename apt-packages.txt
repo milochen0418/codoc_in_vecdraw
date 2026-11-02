@@ -1,0 +1,3 @@
+# Text in the pictures of a drawing that are made without a browser (its link preview, its preview
+# on the storage page, what the AI sees): the container has no font with Chinese in it otherwise.
+fonts-noto-cjk

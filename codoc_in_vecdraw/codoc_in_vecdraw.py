@@ -15,7 +15,7 @@ from reflex_ddns_auth.intent import install_intent_host
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 
-from codoc_in_vecdraw import ai_tools, ops, presence, saving, yjs_ws
+from codoc_in_vecdraw import ai_tools, embed, link_preview, ops, presence, saving, yjs_ws
 from codoc_in_vecdraw.call import CALLS_ENABLED
 from codoc_in_vecdraw.components.canvas import editor_view
 from codoc_in_vecdraw.components.doc_list import doc_list_page
@@ -178,11 +178,22 @@ app.register_lifespan_task(lifespan)
 
 # The drawings' shapes, held by the server too: each change reaches the store a moment later.
 yjs_ws.register_yjs_routes(app)
-yjs_ws.on_change = saving.changed
+
+
+def _drawing_changed(doc_id: str) -> None:
+    saving.changed(doc_id)
+    embed.changed(doc_id)
+
+
+yjs_ws.on_change = _drawing_changed
 saving.on_gone = document_gone
 
 # On re_ddns with an AI Hub: the hub's assistant may read drawings and draw on them.
 ai_tools.register(app)
+
+# What a link to a drawing shows in a chat app, and a drawing to look at on other apps' pages.
+link_preview.register(app)
+embed.register(app)
 
 app._api.add_route(BYE_PATH, bye, methods=["POST"])
 app._api.add_route("/_vecdraw/upload/{doc_id}", upload_image, methods=["POST"])

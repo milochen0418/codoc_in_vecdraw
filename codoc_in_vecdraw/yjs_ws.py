@@ -51,7 +51,7 @@ from pycrdt import (
 from starlette.routing import WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from codoc_in_vecdraw.states.document_store import DOCUMENTS_STORE
+from codoc_in_vecdraw.states.document_store import DOCUMENTS_STORE, Document
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +261,14 @@ async def room(doc_id: str) -> Room | None:
         state = await asyncio.to_thread(DOCUMENTS_STORE.state, doc_id)
         r = _rooms[doc_id] = Room(doc_id, state, stored["shapes"])
     return r
+
+
+async def current(doc_id: str) -> Document | None:
+    """The drawing as it is right now, for looking at: its room's shapes when it has one, as the
+    store gets them only a moment later. Opens no room."""
+    stored = await asyncio.to_thread(DOCUMENTS_STORE.get, doc_id)
+    r = _rooms.get(doc_id)
+    return {**stored, "shapes": r.shape_list()} if stored is not None and r is not None else stored
 
 
 async def close(doc_id: str) -> None:

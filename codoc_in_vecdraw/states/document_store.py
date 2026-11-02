@@ -31,8 +31,10 @@ import shutil
 import sys
 import threading
 import time
+import unicodedata
 import uuid
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Iterable, Optional, TypedDict
 from urllib.parse import quote
@@ -432,6 +434,11 @@ def _num(value, default: float = 0.0) -> float:
         return default
 
 
+def _text_width(content: str, size: float) -> float:
+    """About how wide a line of text is: Chinese and the like take a whole em per letter."""
+    return sum(size if unicodedata.east_asian_width(c) in "WF" else size * 0.6 for c in content)
+
+
 def _svg(shapes: list[dict], image_href: str | None) -> tuple[list[str], list[tuple[float, float, float, float]]]:
     """The shapes as SVG elements, and the box of each."""
     elements: list[str] = []
@@ -470,7 +477,7 @@ def _svg(shapes: list[dict], image_href: str | None) -> tuple[list[str], list[tu
         elif kind == "text":
             content = str(s.get("content") or "")
             size = h or 20
-            w = max(w, len(content) * size * 0.6)
+            w = max(w, _text_width(content, size))
             h = size
             elements.append(
                 f'<text x="{x:g}" y="{y:g}" font-size="{size:g}" dominant-baseline="hanging" '
@@ -520,6 +527,10 @@ def render_thumbnail(shapes: list[dict]) -> str:
     return "data:image/svg+xml;charset=utf-8," + quote(render_svg(shapes))
 
 
+# Pillow reads rgba() only with a whole number for the alpha.
+_RGBA = re.compile(r"rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)")
+
+
 def _color(value) -> tuple | None:
     """A shape's colour for Pillow; None when it paints nothing."""
     from PIL import ImageColor
@@ -527,6 +538,10 @@ def _color(value) -> tuple | None:
     text = str(value or "").strip()
     if not text or text in ("none", "transparent"):
         return None
+    see_through = _RGBA.fullmatch(text)
+    if see_through:
+        red, green, blue, alpha = see_through.groups()
+        return int(red), int(green), int(blue), round(min(float(alpha), 1) * 255)
     try:
         return ImageColor.getrgb(text)
     except ValueError:
@@ -536,6 +551,34 @@ def _color(value) -> tuple | None:
 # The preview on the storage page.
 PREVIEW_SIZE = (480, 300)
 
+# A font with Chinese, Japanese and Korean in it, with the index of the Traditional Chinese one
+# where a file holds several (apt-packages.txt installs the first; the others are a Mac's).
+TEXT_FONTS = (
+    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 3),
+    ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
+    ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+)
+# Where a line of text sits under its top, in em: what the editor's "hanging" baseline comes to.
+TEXT_BASELINE = 0.8
+
+
+@lru_cache(maxsize=1)
+def _text_font() -> tuple[str, int] | None:
+    return next((font for font in TEXT_FONTS if os.path.isfile(font[0])), None)
+
+
+def _font_for(content: str, size: float):
+    """A font to write this text with at this size; None when there is none that has its letters
+    (Pillow's own has only English ones)."""
+    from PIL import ImageFont
+
+    if size < 6:
+        return None
+    found = _text_font()
+    if found is not None:
+        return ImageFont.truetype(found[0], size, index=found[1])
+    return ImageFont.load_default(size=size) if content.isascii() else None
+
 
 def render_png(
     shapes: list[dict],
@@ -544,12 +587,12 @@ def render_png(
 ) -> bytes:
     """A small PNG of the drawing, for the storage page (it shows no SVG) and for the AI to see,
     drawn with Pillow so that it needs no browser: drawings also change without one."""
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     scale_up = 2  # drawn big and scaled down, for smooth edges
     width, height = picture_size[0] * scale_up, picture_size[1] * scale_up
     picture = Image.new("RGB", (width, height), "white")
-    draw = ImageDraw.Draw(picture)
+    draw = ImageDraw.Draw(picture, "RGBA")  # "RGBA": a see-through colour lets what is below show
     boxes = _svg(shapes, None)[1]
     if boxes:
         min_x, min_y = min(b[0] for b in boxes), min(b[1] for b in boxes)
@@ -587,11 +630,11 @@ def render_png(
             elif kind == "text":
                 content = str(s.get("content") or "")
                 size = (h or 20) * scale
-                if content.isascii() and size >= 6:
-                    font = ImageFont.load_default(size=size)
-                    draw.text((x0, y0), content, fill=fill or "black", font=font)
-                else:  # Pillow's own font has no other letters: a bar where the text is
-                    draw.rectangle((x0, y0, x0 + len(content) * size * 0.6, y0 + size * 0.8), fill="#d1d5db")
+                font = _font_for(content, size)
+                if font is not None:
+                    draw.text((x0, y0 + size * TEXT_BASELINE), content, fill=fill or "black", font=font, anchor="ls")
+                else:  # a bar where the text is
+                    draw.rectangle((x0, y0, x0 + _text_width(content, size), y0 + size * 0.8), fill="#d1d5db")
             elif kind == "image" and x1 > x0 and y1 > y0:
                 box = (int(x0), int(y0), int(x1), int(y1))
                 path = image_file(str(s.get("src") or "")) if image_file else None

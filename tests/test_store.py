@@ -114,3 +114,11 @@ def test_kinds_of_images():
     assert image_extension(b"GIF89a....") == "gif"
     assert image_extension(b"RIFF\x00\x00\x00\x00WEBPVP8 ") == "webp"
     assert image_extension(b"<svg xmlns=") == ""
+
+
+def test_a_see_through_colour_lets_what_is_below_show():
+    over = {**RECT, "id": "o", "fill": "rgba(0,0,255,0.5)", "stroke": "none", "stroke_width": 0}
+    below = {**RECT, "fill": "#ff0000", "stroke": "none", "stroke_width": 0}
+    picture = Image.open(io.BytesIO(render_png([below, over]))).convert("RGB")
+    red, green, blue = picture.getpixel((240, 150))
+    assert 120 < red < 135 and green == 0 and 120 < blue < 135

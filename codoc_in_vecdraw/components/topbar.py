@@ -7,7 +7,7 @@ from codoc_in_vecdraw.states.doc_list_state import DocListState
 from codoc_in_vecdraw.states.editor_state import EditorState
 from codoc_in_vecdraw.states.ui_state import UiState
 
-_BUTTON = "flex items-center text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
+_BUTTON = "flex items-center flex-shrink-0 whitespace-nowrap text-sm font-medium px-3 py-1.5 rounded-lg transition-colors"
 
 
 def title_editor() -> rx.Component:
@@ -22,7 +22,7 @@ def title_editor() -> rx.Component:
             on_blur=EditorState.rename_document,
             placeholder="Untitled drawing",
             title="Rename this drawing",
-            class_name="w-32 lg:w-56 text-lg font-bold text-gray-800 bg-transparent border border-transparent rounded-md px-2 py-0.5 hover:border-gray-200 focus:border-violet-400 focus:ring-1 focus:ring-violet-400 outline-none",
+            class_name="w-32 lg:w-44 2xl:w-56 text-lg font-bold text-gray-800 bg-transparent border border-transparent rounded-md px-2 py-0.5 hover:border-gray-200 focus:border-violet-400 focus:ring-1 focus:ring-violet-400 outline-none",
         ),
         on_submit=EditorState.rename_from_form,
         reset_on_submit=False,
@@ -85,8 +85,8 @@ def topbar() -> rx.Component:
                 rx.menu.root(
                     rx.menu.trigger(
                         rx.el.button(
-                            rx.icon("file", class_name="w-4 h-4 xl:mr-2"),
-                            rx.el.span("File", class_name="hidden xl:inline"),
+                            rx.icon("file", class_name="w-4 h-4 2xl:mr-2"),
+                            rx.el.span("File", class_name="hidden 2xl:inline"),
                             title="File",
                             class_name=f"{_BUTTON} bg-gray-100 text-gray-700 hover:bg-gray-200",
                         ),
@@ -98,8 +98,8 @@ def topbar() -> rx.Component:
                 ),
                 assistant_button(),
                 rx.el.button(
-                    rx.icon("bot", class_name="w-4 h-4 xl:mr-2"),
-                    rx.el.span("AI Ops", class_name="hidden xl:inline"),
+                    rx.icon("bot", class_name="w-4 h-4 2xl:mr-2"),
+                    rx.el.span("AI Ops", class_name="hidden 2xl:inline"),
                     on_click=UiState.toggle_ai_modal,
                     title="AI Ops",
                     class_name=f"{_BUTTON} bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
